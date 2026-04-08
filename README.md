@@ -97,5 +97,5 @@ Contributions are what make the open-source community such an amazing place to l
 - GitHub: [@Mariam-mahmoud59](https://github.com/Mariam-mahmoud59)
 
 <div align="center">
-  <sub>Built with ❤️ using Flutter</sub>
+  <sub>Built with Mariam using Flutter</sub>
 </div>
