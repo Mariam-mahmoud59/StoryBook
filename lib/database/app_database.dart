@@ -22,7 +22,22 @@ class AppDatabase extends _$AppDatabase {
   /// Bump this version whenever the schema changes and provide a
   /// migration strategy in [migration].
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (Migrator m) async {
+      await m.createAll();
+    },
+    onUpgrade: (Migrator m, int from, int to) async {
+      if (from < 2) {
+        // Add new tracking columns to the sync_queues table without erasing existing data
+        await m.addColumn(syncQueues, syncQueues.retryCount);
+        await m.addColumn(syncQueues, syncQueues.lastAttemptAt);
+        await m.addColumn(syncQueues, syncQueues.lastError);
+      }
+    },
+  );
 
   /// Opens a persistent SQLite database stored in the app's documents
   /// directory.

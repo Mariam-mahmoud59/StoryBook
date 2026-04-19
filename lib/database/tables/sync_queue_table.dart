@@ -35,4 +35,13 @@ class SyncQueues extends Table {
 
   /// Timestamp of when the action was queued.
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// The number of times the sync engine has attempted to process this record.
+  IntColumn get retryCount => integer().withDefault(const Constant(0))();
+
+  /// The timestamp of the last failed attempt.
+  DateTimeColumn get lastAttemptAt => dateTime().nullable()();
+
+  /// The error message or details from the last failed attempt.
+  TextColumn get lastError => text().nullable()();
 }

@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
+import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -54,18 +56,22 @@ class SyncEngineService {
       log('Sync already in progress, skipping.', name: 'SyncEngine');
       return const SyncResult(total: 0, synced: 0, failed: 0);
     }
+
+    final session = _supabase.auth.currentSession;
+    if (session == null || session.isExpired) {
+      log('User is not authenticated. Aborting sync.', name: 'SyncEngine');
+      return const SyncResult(total: 0, synced: 0, failed: 0);
+    }
+
     _isSyncing = true;
     
     try {
-      // Automatically reset any previously failed actions to pending before we begin.
-      await retryFailedActions();
-
       int successCount = 0;
       int failedCount = 0;
 
-      // 1 — Fetch all pending records, ordered by creation time (FIFO).
+      // 1 — Fetch all records awaiting sync, ordered by creation time (FIFO).
       final pendingRecords = await (_db.select(_db.syncQueues)
-            ..where((row) => row.status.equals('pending'))
+            ..where((row) => row.status.equals('pending') | row.status.equals('failed'))
             ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
           .get();
 
@@ -79,20 +85,37 @@ class SyncEngineService {
         name: 'SyncEngine',
       );
 
+      // Track dependencies that failed in this run to preserve order.
+      final Set<String> blockedDependencies = {};
+
       // 2 — Process each record individually.
       for (final record in pendingRecords) {
+        final Map<String, dynamic> data = jsonDecode(record.payload) as Map<String, dynamic>;
+        final storyId = data['story_id'] as String? ?? data['id'] as String?;
+
         try {
-          // 2a — Mark as 'processing' so it isn't picked up by a concurrent run.
+          // 2a — Backoff Strategy
+          if (record.lastAttemptAt != null && record.retryCount > 0) {
+            final int backoffSeconds = 2 * (1 << (record.retryCount - 1)); // 2, 4, 8, 16...
+            final nextAttempt = record.lastAttemptAt!.add(Duration(seconds: backoffSeconds));
+            if (DateTime.now().isBefore(nextAttempt)) {
+              continue; // Skip due to backoff delay
+            }
+          }
+
+          // 2b — Check Dependency constraints
+          if (storyId != null && blockedDependencies.contains(storyId)) {
+            log('Skipping [${record.actionType}] id=${record.id} due to dependency blockage.', name: 'SyncEngine');
+            continue;
+          }
+
+          // 2c — Mark as 'processing' so it isn't picked up by a concurrent run.
           await _updateStatus(record.id, 'processing');
 
-          // 2b — Parse the JSON payload.
-          final Map<String, dynamic> data =
-              jsonDecode(record.payload) as Map<String, dynamic>;
-
-          // 2c — Route to the correct Supabase operation.
+          // 2d — Route to the correct Supabase operation.
           await _dispatch(record.actionType, data);
 
-          // 2d — Success → remove from queue.
+          // 2e — Success → remove from queue.
           await (_db.delete(_db.syncQueues)
                 ..where((row) => row.id.equals(record.id)))
               .go();
@@ -103,17 +126,31 @@ class SyncEngineService {
             'Synced [${record.actionType}] id=${record.id}',
             name: 'SyncEngine',
           );
+        } on AuthException catch (e) {
+          log('Auth error blocking sync: $e', name: 'SyncEngine');
+          await _markAsFailed(record.id, record.retryCount, 'AuthException: ${e.message}', incrementRetry: false);
+          break; // Stop Sync loop
         } catch (e) {
-          // 2e — Failure → mark as 'failed', log, and continue.
           failedCount++;
 
-          await _updateStatus(record.id, 'failed');
+          String errorMsg = e.toString();
+          if (e is PostgrestException) {
+            errorMsg = 'PostgrestException: ${e.message}';
+          } else if (e is SocketException || e is TimeoutException) {
+            errorMsg = 'NetworkError: $e';
+          }
 
-          log(
-            'Failed to sync [${record.actionType}] id=${record.id}: $e',
-            name: 'SyncEngine',
-            level: 900, // Warning level
-          );
+          final isPermanent = await _markAsFailed(record.id, record.retryCount, errorMsg, incrementRetry: true);
+          
+          if (isPermanent) {
+            log('Permanently failed [${record.actionType}] id=${record.id}: $errorMsg', name: 'SyncEngine', level: 900);
+          } else {
+            log('Failed to sync [${record.actionType}] id=${record.id}: $errorMsg. Will retry.', name: 'SyncEngine', level: 800);
+          }
+
+          if (storyId != null) {
+            blockedDependencies.add(storyId);
+          }
         }
       }
 
@@ -136,15 +173,29 @@ class SyncEngineService {
   // Retry Failed Actions
   // -------------------------------------------------------------------------
 
-  /// Resets all `'failed'` records back to `'pending'` so they are
-  /// picked up in the next [syncPendingActions] cycle.
-  Future<int> retryFailedActions() async {
-    final count = await (_db.update(_db.syncQueues)
-          ..where((row) => row.status.equals('failed')))
-        .write(const SyncQueuesCompanion(status: Value('pending')));
+  Future<bool> _markAsFailed(
+    int recordId,
+    int currentRetryCount,
+    String errorMsg, {
+    required bool incrementRetry,
+  }) async {
+    final int nextCount =
+        incrementRetry ? currentRetryCount + 1 : currentRetryCount;
+    final bool isPermanent = nextCount >= 5;
+    final String status = isPermanent ? 'permanently_failed' : 'failed';
 
-    log('Reset $count failed action(s) to pending.', name: 'SyncEngine');
-    return count;
+    await (_db.update(_db.syncQueues)
+          ..where((row) => row.id.equals(recordId)))
+        .write(
+      SyncQueuesCompanion(
+        status: Value(status),
+        retryCount: Value(nextCount),
+        lastAttemptAt: Value(DateTime.now()),
+        lastError: Value(errorMsg),
+      ),
+    );
+
+    return isPermanent;
   }
 
   // -------------------------------------------------------------------------
@@ -176,7 +227,7 @@ class SyncEngineService {
     switch (actionType) {
       // ── Stories ──────────────────────────────────────────────────────
       case 'CREATE_STORY':
-        await _supabase.from('stories').insert(_toStoryRow(data));
+        await _supabase.from('stories').upsert(_toStoryRow(data));
         break;
 
       case 'UPDATE_STORY':
@@ -192,7 +243,7 @@ class SyncEngineService {
 
       // ── Story Pages ─────────────────────────────────────────────────
       case 'CREATE_STORY_PAGE':
-        await _supabase.from('story_pages').insert(_toPageRow(data));
+        await _supabase.from('story_pages').upsert(_toPageRow(data));
         break;
 
       case 'UPDATE_STORY_PAGE':
@@ -216,7 +267,7 @@ class SyncEngineService {
       case 'TOGGLE_FAVORITE':
         final isFavorite = data['is_favorite'] as bool;
         if (isFavorite) {
-          await _supabase.from('favorites').insert({
+          await _supabase.from('favorites').upsert({
             'user_id': data['user_id'],
             'story_id': data['story_id'],
           });
