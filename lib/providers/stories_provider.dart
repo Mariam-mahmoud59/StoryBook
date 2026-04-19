@@ -1,27 +1,26 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/story.dart';
+import '../repositories/story_repository.dart';
 
 class StoriesProvider extends ChangeNotifier {
+  final StoryRepository _storyRepository;
   List<Story> _stories = [];
-  static const String _storageKey = 'storybook_stories';
+
+  StoriesProvider({required StoryRepository storyRepository})
+      : _storyRepository = storyRepository;
 
   List<Story> get stories => _stories;
   List<Story> get favorites => _stories.where((s) => s.isFavorite).toList();
 
   Future<void> loadStories() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final json = prefs.getString(_storageKey);
-      if (json != null) {
-        final list = jsonDecode(json) as List<dynamic>;
-        _stories = list
-            .map((e) => Story.fromJson(e as Map<String, dynamic>))
-            .toList();
-      } else {
-        _stories = sampleStories();
-        await _save();
+      _stories = await _storyRepository.getStories();
+      if (_stories.isEmpty) {
+        // If empty, perhaps load some sample stories
+        for (var story in sampleStories()) {
+          await _storyRepository.createStory(story);
+        }
+        _stories = await _storyRepository.getStories();
       }
     } catch (_) {
       _stories = sampleStories();
@@ -29,18 +28,12 @@ class StoriesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _save() async {
-    final prefs = await SharedPreferences.getInstance();
-    final json = jsonEncode(_stories.map((s) => s.toJson()).toList());
-    await prefs.setString(_storageKey, json);
-  }
-
-  String addStory({
+  Future<String> addStory({
     required String title,
     required String coverColor,
     required String coverEmoji,
     required List<StoryPage> pages,
-  }) {
+  }) async {
     final id = DateTime.now().millisecondsSinceEpoch.toString();
     final now = DateTime.now();
     final story = Story(
@@ -52,35 +45,38 @@ class StoriesProvider extends ChangeNotifier {
       createdAt: now,
       updatedAt: now,
     );
+
+    await _storyRepository.createStory(story);
     _stories.insert(0, story);
-    _save();
     notifyListeners();
     return id;
   }
 
-  void updateStory(String id, Story updated) {
+  Future<void> updateStory(String id, Story updated) async {
     final index = _stories.indexWhere((s) => s.id == id);
     if (index != -1) {
-      _stories[index] = updated.copyWith(updatedAt: DateTime.now());
-      _save();
+      final newStory = updated.copyWith(updatedAt: DateTime.now());
+      await _storyRepository.updateStory(newStory);
+      _stories[index] = newStory;
       notifyListeners();
     }
   }
 
-  void deleteStory(String id) {
+  Future<void> deleteStory(String id) async {
+    await _storyRepository.deleteStory(id);
     _stories.removeWhere((s) => s.id == id);
-    _save();
     notifyListeners();
   }
 
-  void toggleFavorite(String id) {
+  Future<void> toggleFavorite(String id) async {
     final index = _stories.indexWhere((s) => s.id == id);
     if (index != -1) {
+      final isNowFavorite = !_stories[index].isFavorite;
+      await _storyRepository.toggleFavorite(id, isNowFavorite);
       _stories[index] = _stories[index].copyWith(
-        isFavorite: !_stories[index].isFavorite,
+        isFavorite: isNowFavorite,
         updatedAt: DateTime.now(),
       );
-      _save();
       notifyListeners();
     }
   }
@@ -93,3 +89,4 @@ class StoriesProvider extends ChangeNotifier {
     }
   }
 }
+

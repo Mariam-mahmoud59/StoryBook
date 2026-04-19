@@ -4,14 +4,14 @@ import 'dart:developer';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../services/auth_service.dart';
+import '../repositories/auth_repository.dart';
 
 /// Manages authentication state for the Storybook app.
 ///
-/// Wraps [SupabaseAuthService] and exposes reactive state via
+/// Wraps [AuthRepository] and exposes reactive state via
 /// [ChangeNotifier] for the Provider pattern used throughout the project.
 class AuthProvider extends ChangeNotifier {
-  final SupabaseAuthService _authService = SupabaseAuthService();
+  final AuthRepository _authRepository = AuthRepository();
 
   // ── State ──────────────────────────────────────────────────────────────
   bool _isLoading = false;
@@ -33,7 +33,7 @@ class AuthProvider extends ChangeNotifier {
 
   /// Listens to Supabase auth state changes and updates the local user.
   void _listenToAuthChanges() {
-    _authSubscription = _authService.authStateChanges.listen((authState) {
+    _authSubscription = _authRepository.authStateChanges.listen((authState) {
       final session = authState.session;
       _user = session?.user;
       notifyListeners();
@@ -50,7 +50,7 @@ class AuthProvider extends ChangeNotifier {
 
   /// Checks if a user session already exists (e.g., after app restart).
   void checkAuthState() {
-    _user = _authService.getCurrentUser();
+    _user = _authRepository.getCurrentUser();
     notifyListeners();
   }
 
@@ -78,8 +78,8 @@ class AuthProvider extends ChangeNotifier {
     _clearError();
 
     try {
-      await _authService.signInWithEmail(email.trim(), password);
-      _user = _authService.getCurrentUser();
+      await _authRepository.signInWithEmail(email.trim(), password);
+      _user = _authRepository.getCurrentUser();
       _setLoading(false);
       return true;
     } on AuthServiceException catch (e) {
@@ -127,8 +127,8 @@ class AuthProvider extends ChangeNotifier {
     _clearError();
 
     try {
-      await _authService.signUpWithEmail(email.trim(), password);
-      _user = _authService.getCurrentUser();
+      await _authRepository.signUpWithEmail(email.trim(), password);
+      _user = _authRepository.getCurrentUser();
       _setLoading(false);
       return true;
     } on AuthServiceException catch (e) {
@@ -152,7 +152,7 @@ class AuthProvider extends ChangeNotifier {
     _clearError();
 
     try {
-      final success = await _authService.signInWithGoogle();
+      final success = await _authRepository.signInWithGoogle();
       _setLoading(false);
       return success;
     } on AuthServiceException catch (e) {
@@ -205,7 +205,7 @@ class AuthProvider extends ChangeNotifier {
     _setLoading(true);
 
     try {
-      await _authService.signOut();
+      await _authRepository.signOut();
       _user = null;
     } on AuthServiceException catch (e) {
       _errorMessage = e.message;

@@ -6,15 +6,16 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'tables/sync_queue_table.dart';
+import 'tables/stories_table.dart';
+import 'tables/story_pages_table.dart';
 
 part 'app_database.g.dart';
 
 /// The central Drift database for the Storybook app.
 ///
 /// Currently manages the [SyncQueues] table used by the offline-first
-/// sync engine. Additional tables should be registered here as the
-/// data layer grows.
-@DriftDatabase(tables: [SyncQueues])
+/// sync engine, [StoriesTable], and [StoryPagesTable].
+@DriftDatabase(tables: [SyncQueues, StoriesTable, StoryPagesTable])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 

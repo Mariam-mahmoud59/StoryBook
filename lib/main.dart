@@ -10,6 +10,7 @@ import 'app.dart';
 import 'database/app_database.dart';
 import 'providers/auth_provider.dart';
 import 'providers/stories_provider.dart';
+import 'repositories/story_repository.dart';
 import 'services/connectivity_sync_service.dart';
 import 'services/sync_engine_service.dart';
 
@@ -40,6 +41,8 @@ void main() async {
     supabase: Supabase.instance.client,
   );
 
+  final storyRepository = StoryRepository(db: appDatabase);
+
   // ── Start connectivity listener (auto-sync on reconnect) ────────────────
   final connectivitySync = ConnectivitySyncService(
     syncEngineService: syncEngine,
@@ -51,9 +54,10 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()..checkAuthState()),
-        ChangeNotifierProvider(create: (_) => StoriesProvider()..loadStories()),
+        ChangeNotifierProvider(create: (_) => StoriesProvider(storyRepository: storyRepository)..loadStories()),
       ],
       child: const StorybookApp(),
     ),
   );
 }
+

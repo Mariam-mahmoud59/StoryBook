@@ -26,6 +26,7 @@ import '../database/app_database.dart';
 class SyncEngineService {
   final AppDatabase _db;
   final SupabaseClient _supabase;
+  bool _isSyncing = false;
 
   SyncEngineService({
     required AppDatabase db,
@@ -49,73 +50,86 @@ class SyncEngineService {
   ///
   /// Returns a [SyncResult] summarizing what happened.
   Future<SyncResult> syncPendingActions() async {
-    int successCount = 0;
-    int failedCount = 0;
-
-    // 1 — Fetch all pending records, ordered by creation time (FIFO).
-    final pendingRecords = await (_db.select(_db.syncQueues)
-          ..where((row) => row.status.equals('pending'))
-          ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
-        .get();
-
-    if (pendingRecords.isEmpty) {
-      log('No pending actions to sync.', name: 'SyncEngine');
+    if (_isSyncing) {
+      log('Sync already in progress, skipping.', name: 'SyncEngine');
       return const SyncResult(total: 0, synced: 0, failed: 0);
     }
+    _isSyncing = true;
+    
+    try {
+      // Automatically reset any previously failed actions to pending before we begin.
+      await retryFailedActions();
 
-    log(
-      'Starting sync: ${pendingRecords.length} pending action(s).',
-      name: 'SyncEngine',
-    );
+      int successCount = 0;
+      int failedCount = 0;
 
-    // 2 — Process each record individually.
-    for (final record in pendingRecords) {
-      try {
-        // 2a — Mark as 'processing' so it isn't picked up by a concurrent run.
-        await _updateStatus(record.id, 'processing');
+      // 1 — Fetch all pending records, ordered by creation time (FIFO).
+      final pendingRecords = await (_db.select(_db.syncQueues)
+            ..where((row) => row.status.equals('pending'))
+            ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
+          .get();
 
-        // 2b — Parse the JSON payload.
-        final Map<String, dynamic> data =
-            jsonDecode(record.payload) as Map<String, dynamic>;
-
-        // 2c — Route to the correct Supabase operation.
-        await _dispatch(record.actionType, data);
-
-        // 2d — Success → remove from queue.
-        await (_db.delete(_db.syncQueues)
-              ..where((row) => row.id.equals(record.id)))
-            .go();
-
-        successCount++;
-
-        log(
-          'Synced [${record.actionType}] id=${record.id}',
-          name: 'SyncEngine',
-        );
-      } catch (e) {
-        // 2e — Failure → mark as 'failed', log, and continue.
-        failedCount++;
-
-        await _updateStatus(record.id, 'failed');
-
-        log(
-          'Failed to sync [${record.actionType}] id=${record.id}: $e',
-          name: 'SyncEngine',
-          level: 900, // Warning level
-        );
+      if (pendingRecords.isEmpty) {
+        log('No pending actions to sync.', name: 'SyncEngine');
+        return const SyncResult(total: 0, synced: 0, failed: 0);
       }
+
+      log(
+        'Starting sync: ${pendingRecords.length} pending action(s).',
+        name: 'SyncEngine',
+      );
+
+      // 2 — Process each record individually.
+      for (final record in pendingRecords) {
+        try {
+          // 2a — Mark as 'processing' so it isn't picked up by a concurrent run.
+          await _updateStatus(record.id, 'processing');
+
+          // 2b — Parse the JSON payload.
+          final Map<String, dynamic> data =
+              jsonDecode(record.payload) as Map<String, dynamic>;
+
+          // 2c — Route to the correct Supabase operation.
+          await _dispatch(record.actionType, data);
+
+          // 2d — Success → remove from queue.
+          await (_db.delete(_db.syncQueues)
+                ..where((row) => row.id.equals(record.id)))
+              .go();
+
+          successCount++;
+
+          log(
+            'Synced [${record.actionType}] id=${record.id}',
+            name: 'SyncEngine',
+          );
+        } catch (e) {
+          // 2e — Failure → mark as 'failed', log, and continue.
+          failedCount++;
+
+          await _updateStatus(record.id, 'failed');
+
+          log(
+            'Failed to sync [${record.actionType}] id=${record.id}: $e',
+            name: 'SyncEngine',
+            level: 900, // Warning level
+          );
+        }
+      }
+
+      log(
+        'Sync complete: $successCount synced, $failedCount failed.',
+        name: 'SyncEngine',
+      );
+
+      return SyncResult(
+        total: pendingRecords.length,
+        synced: successCount,
+        failed: failedCount,
+      );
+    } finally {
+      _isSyncing = false;
     }
-
-    log(
-      'Sync complete: $successCount synced, $failedCount failed.',
-      name: 'SyncEngine',
-    );
-
-    return SyncResult(
-      total: pendingRecords.length,
-      synced: successCount,
-      failed: failedCount,
-    );
   }
 
   // -------------------------------------------------------------------------
