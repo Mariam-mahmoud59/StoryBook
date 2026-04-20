@@ -80,6 +80,49 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> {
     return Color(int.parse(hex, radix: 16));
   }
 
+  String getSyncStatus(Story story) {
+    return "synced";
+  }
+
+  Widget _buildSyncStatus(Story story) {
+    final status = getSyncStatus(story);
+    Color color;
+    switch (status.toLowerCase()) {
+      case 'synced':
+        color = Colors.green;
+        break;
+      case 'pending':
+        color = Colors.orange;
+        break;
+      case 'failed':
+        color = Colors.red;
+        break;
+      default:
+        color = Colors.grey;
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          status.toLowerCase() == 'synced' ? Icons.check_circle_rounded : 
+          status.toLowerCase() == 'pending' ? Icons.sync_rounded : Icons.error_rounded,
+          size: 12,
+          color: color,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          status,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final stories = context.watch<StoriesProvider>().stories;
@@ -262,15 +305,24 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
       itemCount: stories.length,
       itemBuilder: (context, i) {
-        return StoryCard(
-          story: stories[i],
-          onTap: () =>
-              Navigator.pushNamed(context, '/viewer/${stories[i].id}'),
-          onEdit: () =>
-              Navigator.pushNamed(context, '/editor/${stories[i].id}'),
-          onDelete: () => _confirmDelete(context, stories[i].id),
-          onToggleFavorite: () =>
-              context.read<StoriesProvider>().toggleFavorite(stories[i].id),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 6),
+              child: _buildSyncStatus(stories[i]),
+            ),
+            StoryCard(
+              story: stories[i],
+              onTap: () =>
+                  Navigator.pushNamed(context, '/viewer/${stories[i].id}'),
+              onEdit: () =>
+                  Navigator.pushNamed(context, '/editor/${stories[i].id}'),
+              onDelete: () => _confirmDelete(context, stories[i].id),
+              onToggleFavorite: () =>
+                  context.read<StoriesProvider>().toggleFavorite(stories[i].id),
+            ),
+          ],
         ).animate().fadeIn(delay: (i * 50).ms);
       },
     );
@@ -366,6 +418,8 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
+                        const SizedBox(height: 4),
+                        _buildSyncStatus(story),
                         const SizedBox(height: 6),
                         Row(
                           children: [
