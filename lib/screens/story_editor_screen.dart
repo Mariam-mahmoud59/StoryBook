@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../models/story.dart';
 import '../providers/stories_provider.dart';
@@ -103,6 +105,36 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
     });
   }
 
+  void _nextPage() {
+    if (_activePage < _pages.length - 1) {
+      HapticFeedback.lightImpact();
+      setState(() => _activePage++);
+    }
+  }
+
+  void _previousPage() {
+    if (_activePage > 0) {
+      HapticFeedback.lightImpact();
+      setState(() => _activePage--);
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    try {
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
+        _updateActivePage('image', pickedFile.path);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to pick image')),
+        );
+      }
+    }
+  }
+
   void _deletePage() {
     if (_pages.length <= 1) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -149,6 +181,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
 
     setState(() => _saveStatus = _SaveStatus.saving);
     await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
 
     final provider = context.read<StoriesProvider>();
 
@@ -576,8 +609,33 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  _label(
-                                      'PAGE ${_activePage + 1} OF ${_pages.length}'),
+                                  Row(
+                                    children: [
+                                      _label('PAGE ${_activePage + 1} OF ${_pages.length}'),
+                                      const SizedBox(width: 16),
+                                      GestureDetector(
+                                        onTap: _activePage > 0 ? _previousPage : null,
+                                        child: Icon(
+                                          Icons.arrow_back_ios_rounded,
+                                          size: 14,
+                                          color: _activePage > 0
+                                              ? AppColors.foreground
+                                              : AppColors.mutedForeground.withValues(alpha: 0.4),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      GestureDetector(
+                                        onTap: _activePage < _pages.length - 1 ? _nextPage : null,
+                                        child: Icon(
+                                          Icons.arrow_forward_ios_rounded,
+                                          size: 14,
+                                          color: _activePage < _pages.length - 1
+                                              ? AppColors.foreground
+                                              : AppColors.mutedForeground.withValues(alpha: 0.4),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                   GestureDetector(
                                     onTap: _deletePage,
                                     child: Container(
@@ -619,13 +677,66 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                                 (v) => _updateActivePage('text', v),
                               ),
                               const SizedBox(height: 10),
-                              _label('ILLUSTRATION DESCRIPTION'),
+                              _label('PAGE IMAGE'),
                               const SizedBox(height: 4),
-                              _multilineField(
-                                currentPage.imageDescription,
-                                "Describe the picture on this page...",
-                                (v) => _updateActivePage('image', v),
-                                maxLines: 3,
+                              GestureDetector(
+                                onTap: _pickImage,
+                                child: Container(
+                                  width: double.infinity,
+                                  height: 140,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.input,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: AppColors.border),
+                                  ),
+                                  child: currentPage.imageDescription.isNotEmpty
+                                      ? ClipRRect(
+                                          borderRadius: BorderRadius.circular(11),
+                                          child: Stack(
+                                            fit: StackFit.expand,
+                                            children: [
+                                              Image.file(
+                                                File(currentPage.imageDescription),
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (ctx, err, stk) => const Center(
+                                                  child: Icon(Icons.broken_image_rounded, color: AppColors.mutedForeground, size: 40),
+                                                ),
+                                              ),
+                                              Positioned(
+                                                bottom: 8,
+                                                right: 8,
+                                                child: GestureDetector(
+                                                  onTap: () => _updateActivePage('image', ''),
+                                                  child: Container(
+                                                    padding: const EdgeInsets.all(6),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.black.withValues(alpha: 0.6),
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                    child: const Icon(Icons.delete_rounded, color: Colors.white, size: 16),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        )
+                                      : const Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.add_photo_alternate_rounded,
+                                                color: AppColors.mutedForeground, size: 36),
+                                            SizedBox(height: 6),
+                                            Text(
+                                              'Tap to select image',
+                                              style: TextStyle(
+                                                color: AppColors.mutedForeground,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                ),
                               ),
                               const SizedBox(height: 10),
                               _label('PAGE COLOUR'),
