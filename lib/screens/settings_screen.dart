@@ -1,3 +1,4 @@
+import '../providers/auth_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -88,6 +89,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<StoriesProvider>();
     final stories = provider.stories;
+    final authProvider = context.watch<AuthProvider>();
+    final currentUser = authProvider.user;
+    final userName = currentUser?.userMetadata?['name'] ??
+        currentUser?.email?.split('@')[0] ??
+        'Story Creator';
+    final userEmail = currentUser?.email ?? '';
     final favoriteCount = stories.where((s) => s.isFavorite).length;
 
     return Scaffold(
@@ -165,14 +172,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'Story Creator',
-                                style: TextStyle(
+                              Text(
+                                userName,
+                                style: const TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.foreground,
                                 ),
                               ),
+                              if (userEmail.isNotEmpty)
+                                Text(
+                                  userEmail,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.mutedForeground,
+                                  ),
+                                ),
                               Text(
                                 '${stories.length} ${stories.length == 1 ? "story" : "stories"} created',
                                 style: const TextStyle(
@@ -304,6 +319,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
                                 color: AppColors.destructive,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    GestureDetector(
+                      onTap: () async {
+                        HapticFeedback.heavyImpact();
+                        await context.read<AuthProvider>().signOut();
+                        if (context.mounted) {
+                          Navigator.pushNamedAndRemoveUntil(
+                              context, '/sign-in', (route) => false);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.card,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            )
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.logout_rounded,
+                                color: AppColors.primary, size: 20),
+                            SizedBox(width: 8),
+                            Text(
+                              'Sign Out',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
                               ),
                             ),
                           ],

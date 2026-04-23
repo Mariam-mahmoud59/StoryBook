@@ -29,28 +29,68 @@ class SupabaseAuthService {
   Stream<AuthState> get authStateChanges => _auth.onAuthStateChange;
 
   // ---------------------------------------------------------------------------
-  // Current User
+  // Current User (cached — use getUser() for server validation)
   // ---------------------------------------------------------------------------
 
-  /// Returns the currently authenticated [User], or `null` if no session
-  /// is active.
+  /// Returns the locally cached [User], or `null` if no session is active.
+  ///
+  /// ⚠️ This does NOT validate the session with the server. A deleted or
+  /// banned user will still appear here until the cache is cleared.
+  /// For reliable checks, use [getUser] instead.
   User? getCurrentUser() => _auth.currentUser;
+
+  /// Returns the locally cached [Session], or `null`.
+  Session? getCurrentSession() => _auth.currentSession;
+
+  // ---------------------------------------------------------------------------
+  // Server-side User Validation
+  // ---------------------------------------------------------------------------
+
+  /// Validates the current session against the Supabase server.
+  ///
+  /// Returns a [UserResponse] containing the server-verified user data.
+  /// If the session is invalid (e.g., user deleted from dashboard),
+  /// this will throw, allowing the caller to force a logout.
+  ///
+  /// This is the **only reliable way** to confirm a user still exists.
+  Future<UserResponse> getUser() async {
+    try {
+      final response = await _auth.getUser();
+      return response;
+    } on AuthException catch (e) {
+      log('getUser failed: ${e.message}', name: 'SupabaseAuthService');
+      throw AuthServiceException('Session validation failed: ${e.message}');
+    } catch (e) {
+      log('getUser unexpected error: $e', name: 'SupabaseAuthService');
+      throw const AuthServiceException(
+        'Could not validate your session. Please sign in again.',
+      );
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Email / Password — Sign Up
   // ---------------------------------------------------------------------------
 
-  /// Registers a new user with [email] and [password].
+  /// Registers a new user with [email], [password], and optional [name].
+  ///
+  /// The [name] is stored in `user_metadata` so it's available immediately
+  /// without a separate profiles query.
   ///
   /// On success, Supabase will also fire the database trigger that
   /// auto-creates the user's `profiles` row.
   ///
   /// Throws [AuthServiceException] on failure.
-  Future<AuthResponse> signUpWithEmail(String email, String password) async {
+  Future<AuthResponse> signUpWithEmail(
+    String email,
+    String password, {
+    String? name,
+  }) async {
     try {
       final response = await _auth.signUp(
         email: email,
         password: password,
+        data: name != null ? {'name': name} : null,
       );
       return response;
     } on AuthException catch (e) {
@@ -124,12 +164,15 @@ class SupabaseAuthService {
   // Sign Out
   // ---------------------------------------------------------------------------
 
-  /// Signs the current user out and clears the local session.
+  /// Signs the current user out and clears ALL sessions (including OAuth).
+  ///
+  /// Uses [SignOutScope.global] to ensure remote sessions are also revoked,
+  /// preventing silent OAuth session restoration on next app launch.
   ///
   /// Throws [AuthServiceException] on failure.
   Future<void> signOut() async {
     try {
-      await _auth.signOut();
+      await _auth.signOut(scope: SignOutScope.global);
     } on AuthException catch (e) {
       log('SignOut failed: ${e.message}', name: 'SupabaseAuthService');
       throw AuthServiceException('Sign-out failed: ${e.message}');

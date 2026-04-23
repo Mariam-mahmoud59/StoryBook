@@ -5,8 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 
-// تأكد إن المسار واسم الـ Provider مطابق للي زميلك عمله
-import '../providers/stories_provider.dart'; 
+import '../providers/stories_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/gradient_background.dart';
 
@@ -42,22 +41,20 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    // 1. قراءة القصص (زي ما هي)
     final stories = context.watch<StoriesProvider>().stories;
     final favoriteCount = stories.where((s) => s.isFavorite).length;
 
-    // 2. قراءة بيانات المستخدم الحقيقية من الـ AuthProvider (الجديد)
     final authProvider = context.watch<AuthProvider>();
     final currentUser = authProvider.user;
 
-    // 3. استخراج الاسم (لو ملوش اسم مسجل، بناخد أول جزء من الإيميل، ولو مفيش نكتب Guest)
-    final String userName = currentUser?.userMetadata?['name'] ?? 
-                            currentUser?.email?.split('@')[0] ?? 
-                            "Guest";
+    final String userName = currentUser?.userMetadata?['name'] ??
+        currentUser?.email?.split('@')[0] ??
+        "Guest";
 
-    // 4. استخراج الصورة (لو ملوش صورة، بنعمله صورة ديناميكية بأول حرف من اسمه زي ما كنا عاملين)
-    final String userAvatarUrl = currentUser?.userMetadata?['avatar_url'] ?? 
-                                "https://ui-avatars.com/api/?name=${userName.replaceAll(' ', '+')}&background=0D8ABC&color=fff";
+    String userAvatarUrl = currentUser?.userMetadata?['avatar_url'] ?? "";
+    if (userAvatarUrl.isEmpty || userAvatarUrl.contains('ui-avatars.com')) {
+      userAvatarUrl = "https://api.dicebear.com/7.x/initials/png?seed=${userName.replaceAll(' ', '+')}&backgroundColor=0d8abc";
+    }
 
     return Scaffold(
       body: GradientBackground(
@@ -65,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen>
           slivers: [
             // 1. Premium Frosted Glass AppBar
             SliverAppBar(
+              automaticallyImplyLeading: false,
               expandedHeight: 85.0,
               floating: true,
               pinned: true,
@@ -93,7 +91,18 @@ class _HomeScreenState extends State<HomeScreen>
                     ),
                     child: CircleAvatar(
                       radius: 18,
-                      backgroundImage: NetworkImage(userAvatarUrl),
+                      backgroundColor: Colors.grey.shade200,
+                      child: ClipOval(
+                        child: Image.network(
+                          userAvatarUrl,
+                          width: 36,
+                          height: 36,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) {
+                            return const Icon(Icons.person);
+                          },
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -181,7 +190,8 @@ class _HomeScreenState extends State<HomeScreen>
                             onTap: () =>
                                 Navigator.pushNamed(context, '/stories'),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
                                 color: AppColors.primary.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12),
@@ -198,9 +208,7 @@ class _HomeScreenState extends State<HomeScreen>
                           ),
                         ],
                       ).animate().fadeIn(delay: 350.ms),
-
                       const SizedBox(height: 16),
-
                       SizedBox(
                         height: 150,
                         child: ListView.builder(
@@ -329,7 +337,8 @@ class _HomeScreenState extends State<HomeScreen>
                 if (favoriteCount > 0) ...[
                   const SizedBox(height: 12),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: const Color(0xFFFFF9E0),
                       borderRadius: BorderRadius.circular(10),
@@ -337,7 +346,8 @@ class _HomeScreenState extends State<HomeScreen>
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.stars_rounded, size: 14, color: AppColors.warning),
+                        const Icon(Icons.stars_rounded,
+                            size: 14, color: AppColors.warning),
                         const SizedBox(width: 4),
                         Text(
                           '$favoriteCount Favourites',
@@ -364,7 +374,7 @@ class _HomeScreenState extends State<HomeScreen>
       _ActionItem(
         label: 'Create Story',
         icon: Icons.auto_fix_high_rounded,
-        color: const Color(0xFFFF4B6E), 
+        color: const Color(0xFFFF4B6E),
         onTap: () {
           HapticFeedback.mediumImpact();
           Navigator.pushNamed(context, '/editor/new');
@@ -373,7 +383,7 @@ class _HomeScreenState extends State<HomeScreen>
       _ActionItem(
         label: 'My Library',
         icon: Icons.collections_bookmark_rounded,
-        color: const Color(0xFF10AC84), 
+        color: const Color(0xFF10AC84),
         onTap: () {
           HapticFeedback.mediumImpact();
           Navigator.pushNamed(context, '/stories');
@@ -382,16 +392,17 @@ class _HomeScreenState extends State<HomeScreen>
       _ActionItem(
         label: 'Favourites',
         icon: Icons.favorite_rounded,
-        color: const Color(0xFFFF9F1C), 
+        color: const Color(0xFFFF9F1C),
         onTap: () {
           HapticFeedback.mediumImpact();
-          Navigator.pushNamed(context, '/stories', arguments: {'filter': 'favorites'});
+          Navigator.pushNamed(context, '/stories',
+              arguments: {'filter': 'favorites'});
         },
       ),
       _ActionItem(
         label: 'Settings',
         icon: Icons.tune_rounded,
-        color: const Color(0xFF8E54E9), 
+        color: const Color(0xFF8E54E9),
         onTap: () {
           HapticFeedback.mediumImpact();
           Navigator.pushNamed(context, '/settings');
@@ -442,14 +453,16 @@ class _HomeScreenState extends State<HomeScreen>
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), // زغللة قوية عشان الإزاز يبان
+            filter: ImageFilter.blur(
+                sigmaX: 15, sigmaY: 15), // زغللة قوية عشان الإزاز يبان
             child: Container(
               decoration: BoxDecoration(
                 // هنا السر: شفافية 0.4 عشان يدي تأثير الزجاج الملون
                 color: bgColor.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.5), // لمعة الإطار الزجاجي
+                  color: Colors.white
+                      .withValues(alpha: 0.5), // لمعة الإطار الزجاجي
                   width: 1.5,
                 ),
               ),
@@ -468,7 +481,7 @@ class _HomeScreenState extends State<HomeScreen>
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w900,
-                        color: AppColors.foreground, // النص غامق عشان يتقري بوضوح
+                        color: AppColors.foreground,
                       ),
                       maxLines: 2,
                       textAlign: TextAlign.center,

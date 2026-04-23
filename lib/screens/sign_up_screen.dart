@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
@@ -11,6 +14,9 @@ import '../widgets/kid_button.dart';
 
 /// The Sign Up screen — name, email, password with strength indicator,
 /// confirm password, Google OAuth, and navigation to Sign In.
+///
+/// After successful sign-up, navigates to the Verify Email screen
+/// instead of Home — email confirmation is enforced.
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
 
@@ -31,8 +37,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String? _passwordError;
   String? _confirmError;
 
+  /// Auth listener — only used for Google OAuth callback navigation.
+  StreamSubscription<AuthState>? _oauthSubscription;
+
   @override
   void dispose() {
+    _oauthSubscription?.cancel();
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -92,21 +102,75 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final authProvider = context.read<AuthProvider>();
     authProvider.clearError();
 
-    final success = await authProvider.signUpWithEmail(
+    final result = await authProvider.signUpWithEmail(
       _nameController.text,
       _emailController.text,
       _passwordController.text,
     );
 
-    if (success && mounted) {
-      Navigator.pushReplacementNamed(context, '/');
+    if (!mounted) return;
+
+    switch (result) {
+      case AuthStatus.pendingVerification:
+        Navigator.pushReplacementNamed(
+          context,
+          '/verify-email',
+          arguments: {'email': _emailController.text.trim()},
+        );
+        break;
+
+      case AuthStatus.authenticated:
+        // Do not allow direct Home navigation after sign-up
+        Navigator.pushReplacementNamed(
+          context,
+          '/verify-email',
+          arguments: {'email': _emailController.text.trim()},
+        );
+        break;
+
+      case AuthStatus.recoveringPassword:
+        Navigator.pushReplacementNamed(context, '/update-password');
+        break;
+
+      case AuthStatus.unauthenticated:
+        // Stay on screen and show error
+        break;
     }
   }
+
+  // ── Google OAuth ────────────────────────────────────────────────────────
 
   Future<void> _handleGoogleSignIn() async {
     final authProvider = context.read<AuthProvider>();
     authProvider.clearError();
-    await authProvider.signInWithGoogle();
+
+    final started = await authProvider.signInWithGoogle();
+    if (!started || !mounted) return;
+
+    _oauthSubscription?.cancel();
+    _oauthSubscription =
+        Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
+      if (data.event == AuthChangeEvent.signedIn && mounted) {
+        _oauthSubscription?.cancel();
+        
+        final status = await authProvider.verifySession();
+        if (!mounted) return;
+
+        switch (status) {
+          case AuthStatus.authenticated:
+            Navigator.pushReplacementNamed(context, '/');
+            break;
+          case AuthStatus.recoveringPassword:
+            Navigator.pushReplacementNamed(context, '/update-password');
+            break;
+          case AuthStatus.pendingVerification:
+            Navigator.pushReplacementNamed(context, '/verify-email');
+            break;
+          case AuthStatus.unauthenticated:
+            break;
+        }
+      }
+    });
   }
 
   // ── Password strength ───────────────────────────────────────────────────
@@ -439,8 +503,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                     ),
                     GestureDetector(
-                      onTap: () => Navigator.pushReplacementNamed(
-                          context, '/sign-in'),
+                      onTap: () =>
+                          Navigator.pushReplacementNamed(context, '/sign-in'),
                       child: const Text(
                         'Sign In',
                         style: TextStyle(

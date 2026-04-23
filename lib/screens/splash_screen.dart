@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -22,16 +24,45 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
 
-    Future.delayed(const Duration(milliseconds: 2800), () {
-      if (mounted) {
-        final user = Supabase.instance.client.auth.currentUser;
-        if (user != null) {
-          Navigator.pushReplacementNamed(context, '/');
-        } else {
-          Navigator.pushReplacementNamed(context, '/sign-in');
-        }
-      }
-    });
+    // Start the server-side session verification after a short animation delay.
+    _verifyAndNavigate();
+  }
+
+  /// Validates the session with the Supabase server, then navigates
+  /// based on the resulting [AuthStatus].
+  ///
+  /// This catches ghost sessions (deleted users), expired tokens,
+  /// and unverified emails — all before the user sees anything.
+  Future<void> _verifyAndNavigate() async {
+    // Let the splash animation play for at least 2 seconds.
+    await Future.delayed(const Duration(milliseconds: 2000));
+
+    if (!mounted) return;
+
+    final authProvider = context.read<AuthProvider>();
+    await authProvider.verifySession();
+
+    if (!mounted) return;
+
+    switch (authProvider.status) {
+      case AuthStatus.authenticated:
+        Navigator.pushReplacementNamed(context, '/');
+        break;
+      case AuthStatus.recoveringPassword:
+        Navigator.pushReplacementNamed(context, '/update-password');
+        break;
+      case AuthStatus.pendingVerification:
+        final email = authProvider.user?.email ?? '';
+        Navigator.pushReplacementNamed(
+          context,
+          '/verify-email',
+          arguments: {'email': email},
+        );
+        break;
+      case AuthStatus.unauthenticated:
+        Navigator.pushReplacementNamed(context, '/sign-in');
+        break;
+    }
   }
 
   @override

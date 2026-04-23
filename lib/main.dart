@@ -53,7 +53,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()..checkAuthState()),
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => StoriesProvider(storyRepository: storyRepository)..loadStories()),
       ],
       child: const StorybookApp(),

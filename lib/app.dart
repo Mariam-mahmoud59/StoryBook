@@ -1,23 +1,56 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/app_colors.dart';
 import 'screens/splash_screen.dart';
 import 'screens/sign_in_screen.dart';
 import 'screens/sign_up_screen.dart';
 import 'screens/forgot_password_screen.dart';
+import 'screens/update_password_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/my_stories_screen.dart';
 import 'screens/story_editor_screen.dart';
 import 'screens/story_viewer_screen.dart';
 import 'screens/story_preview_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/verify_email_screen.dart';
 
-class StorybookApp extends StatelessWidget {
+class StorybookApp extends StatefulWidget {
   const StorybookApp({super.key});
+
+  @override
+  State<StorybookApp> createState() => _StorybookAppState();
+}
+
+class _StorybookAppState extends State<StorybookApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  late final StreamSubscription<AuthState> _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.passwordRecovery) {
+        // Clear everything and force navigate to update password
+        _navigatorKey.currentState?.pushNamedAndRemoveUntil(
+          '/update-password',
+          (route) => false,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: "Children's Storybook",
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -67,9 +100,11 @@ class StorybookApp extends StatelessWidget {
         '/sign-in': (context) => const SignInScreen(),
         '/sign-up': (context) => const SignUpScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
+        '/update-password': (context) => const UpdatePasswordScreen(),
         '/': (context) => const HomeScreen(),
         '/stories': (context) => const MyStoriesScreen(),
         '/settings': (context) => const SettingsScreen(),
+        '/verify-email': (context) => const VerifyEmailScreen(),
       },
       onGenerateRoute: (settings) {
         final name = settings.name ?? '';

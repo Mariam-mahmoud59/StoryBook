@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
@@ -11,6 +14,10 @@ import '../widgets/kid_button.dart';
 
 /// The Sign In screen — email/password login, Google OAuth, and
 /// navigation to Sign Up and Forgot Password.
+///
+/// Navigation is **explicitly controlled**:
+/// - Email login → result-based (AuthStatus determines destination)
+/// - Google OAuth → auth stream listener (only active during OAuth flow)
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
 
@@ -26,8 +33,13 @@ class _SignInScreenState extends State<SignInScreen> {
   String? _emailError;
   String? _passwordError;
 
+  /// Auth listener — only used for Google OAuth callback navigation.
+  /// Created on demand when user taps the Google button, cancelled after.
+  StreamSubscription<AuthState>? _oauthSubscription;
+
   @override
   void dispose() {
+    _oauthSubscription?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -57,7 +69,7 @@ class _SignInScreenState extends State<SignInScreen> {
     return valid;
   }
 
-  // ── Sign In ─────────────────────────────────────────────────────────────
+  // ── Sign In (Email) ─────────────────────────────────────────────────────
 
   Future<void> _handleSignIn() async {
     if (!_validateFields()) return;
@@ -65,21 +77,66 @@ class _SignInScreenState extends State<SignInScreen> {
     final authProvider = context.read<AuthProvider>();
     authProvider.clearError();
 
-    final success = await authProvider.signInWithEmail(
+    final status = await authProvider.signInWithEmail(
       _emailController.text,
       _passwordController.text,
     );
 
-    if (success && mounted) {
-      Navigator.pushReplacementNamed(context, '/');
+    if (!mounted) return;
+
+    switch (status) {
+      case AuthStatus.authenticated:
+        Navigator.pushReplacementNamed(context, '/');
+        break;
+      case AuthStatus.recoveringPassword:
+        Navigator.pushReplacementNamed(context, '/update-password');
+        break;
+      case AuthStatus.pendingVerification:
+        Navigator.pushReplacementNamed(
+          context,
+          '/verify-email',
+          arguments: {'email': _emailController.text.trim()},
+        );
+        break;
+      case AuthStatus.unauthenticated:
+        // Error is shown via authProvider.errorMessage — stay on screen.
+        break;
     }
   }
+
+  // ── Sign In (Google OAuth) ──────────────────────────────────────────────
 
   Future<void> _handleGoogleSignIn() async {
     final authProvider = context.read<AuthProvider>();
     authProvider.clearError();
-    await authProvider.signInWithGoogle();
-    // Navigation is handled by auth state listener in splash/main
+
+    final started = await authProvider.signInWithGoogle();
+    if (!started || !mounted) return;
+
+    _oauthSubscription?.cancel();
+    _oauthSubscription =
+        Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
+      if (data.event == AuthChangeEvent.signedIn && mounted) {
+        _oauthSubscription?.cancel();
+        
+        final status = await authProvider.verifySession();
+        if (!mounted) return;
+
+        switch (status) {
+          case AuthStatus.authenticated:
+            Navigator.pushReplacementNamed(context, '/');
+            break;
+          case AuthStatus.recoveringPassword:
+            Navigator.pushReplacementNamed(context, '/update-password');
+            break;
+          case AuthStatus.pendingVerification:
+            Navigator.pushReplacementNamed(context, '/verify-email');
+            break;
+          case AuthStatus.unauthenticated:
+            break;
+        }
+      }
+    });
   }
 
   // ── Build ───────────────────────────────────────────────────────────────

@@ -14,17 +14,29 @@ class AuthRepository {
   /// Exposes the real-time stream of auth state changes.
   Stream<AuthState> get authStateChanges => _authService.authStateChanges;
 
-  /// Retrieves the currently authenticated user.
+  /// Retrieves the locally cached user (NOT server-validated).
   User? getCurrentUser() => _authService.getCurrentUser();
+
+  /// Retrieves the locally cached session.
+  Session? getCurrentSession() => _authService.getCurrentSession();
+
+  /// Validates the session against the Supabase server.
+  ///
+  /// This is the **only reliable** auth check — catches deleted/banned users.
+  Future<UserResponse> getUser() => _authService.getUser();
 
   /// Signs in a user with email and password.
   Future<AuthResponse> signInWithEmail(String email, String password) {
     return _authService.signInWithEmail(email, password);
   }
 
-  /// Signs up a new user with email and password.
-  Future<AuthResponse> signUpWithEmail(String email, String password) {
-    return _authService.signUpWithEmail(email, password);
+  /// Signs up a new user with email, password, and optional display name.
+  Future<AuthResponse> signUpWithEmail(
+    String email,
+    String password, {
+    String? name,
+  }) {
+    return _authService.signUpWithEmail(email, password, name: name);
   }
 
   /// Triggers the Google OAuth flow.
@@ -32,7 +44,7 @@ class AuthRepository {
     return _authService.signInWithGoogle();
   }
 
-  /// Clears the current user's session.
+  /// Clears ALL user sessions (local + remote, including OAuth).
   Future<void> signOut() {
     return _authService.signOut();
   }
