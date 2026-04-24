@@ -127,25 +127,31 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
   void _insertSuggestion(String suggestion) {
     final text = _storyTextController.text;
     final selection = _storyTextController.selection;
-    final hasSelection = selection.start >= 0 && selection.end >= 0;
-    final start = hasSelection ? selection.start : text.length;
-    final end = hasSelection ? selection.end : text.length;
 
-    final prefix = text.substring(0, start);
-    final suffix = text.substring(end);
-    final needsSpaceBefore = prefix.isNotEmpty && !prefix.endsWith(' ');
-    final needsSpaceAfter = suffix.isNotEmpty && !suffix.startsWith(' ');
-    final insertion =
+    final hasValidSelection = selection.isValid &&
+        selection.start >= 0 &&
+        selection.end >= 0 &&
+        selection.start <= text.length &&
+        selection.end <= text.length;
+
+    final start = hasValidSelection ? selection.start : text.length;
+    final end = hasValidSelection ? selection.end : text.length;
+
+    final needsSpaceBefore =
+        start > 0 && !text.substring(0, start).endsWith(' ');
+    final needsSpaceAfter =
+        end < text.length && !text.substring(end).startsWith(' ');
+
+    final insertText =
         '${needsSpaceBefore ? ' ' : ''}$suggestion${needsSpaceAfter ? ' ' : ''}';
-    final nextText = '$prefix$insertion$suffix';
-    final nextOffset = prefix.length + insertion.length;
+    final newText = text.replaceRange(start, end, insertText);
 
-    _storyTextController.value = TextEditingValue(
-      text: nextText,
-      selection: TextSelection.collapsed(offset: nextOffset),
-    );
-    _updateActivePage('text', nextText);
+    _storyTextController.text = newText;
+    final newOffset = start + insertText.length;
+    _storyTextController.selection = TextSelection.collapsed(offset: newOffset);
+
     _storyTextFocusNode.requestFocus();
+    _updateActivePage('text', newText);
   }
 
   Color _hexToColor(String hex) {
@@ -789,6 +795,8 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                               const SizedBox(height: 20),
                               _label('STORY TEXT'),
                               const SizedBox(height: 12),
+                              _label('SUGGESTIONS'),
+                              const SizedBox(height: 8),
                               _suggestionsBar(),
                               const SizedBox(height: 12),
                               _multilineField(

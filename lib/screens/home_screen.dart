@@ -174,7 +174,10 @@ class _HomeScreenState extends State<HomeScreen>
                       ),
                     ),
                   ),
-                ).animate().fadeIn(duration: 600.ms).scale(begin: const Offset(0.8, 0.8)),
+                )
+                    .animate()
+                    .fadeIn(duration: 600.ms)
+                    .scale(begin: const Offset(0.8, 0.8)),
                 Padding(
                   padding: const EdgeInsets.only(right: 20),
                   child: _statBadge(stories.length),
@@ -450,7 +453,10 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ],
       ),
-    ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.05, curve: Curves.easeOutCubic);
+    )
+        .animate()
+        .fadeIn(delay: 200.ms)
+        .slideY(begin: 0.05, curve: Curves.easeOutCubic);
   }
 
   Widget _actionGrid(BuildContext context) {
@@ -586,27 +592,32 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildCoverEmoji(String coverEmoji) {
-    if (coverEmoji.startsWith('http')) {
+    final normalized = coverEmoji.trim();
+    final uri = Uri.tryParse(normalized);
+    final isNetworkImage = uri != null &&
+        uri.hasScheme &&
+        (uri.scheme == 'http' || uri.scheme == 'https');
+
+    if (isNetworkImage) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(18),
-        child: Image.network(coverEmoji,
-            fit: BoxFit.cover, width: 64, height: 64),
+        child:
+            Image.network(normalized, fit: BoxFit.cover, width: 64, height: 64),
       );
-    } else if (coverEmoji.startsWith('/') ||
-        coverEmoji.contains(':\\') ||
-        coverEmoji.startsWith('file://')) {
+    } else if (normalized.startsWith('/') ||
+        normalized.contains(':\\') ||
+        normalized.startsWith('file://')) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(18),
-        child: Image.file(
-            File(coverEmoji.replaceFirst('file://', '')),
-            fit: BoxFit.cover,
-            width: 64,
-            height: 64),
+        child: Image.file(File(normalized.replaceFirst('file://', '')),
+            fit: BoxFit.cover, width: 64, height: 64),
       );
     } else {
       return Text(
-        coverEmoji,
+        normalized,
         style: const TextStyle(fontSize: 42),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       );
     }
   }

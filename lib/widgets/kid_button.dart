@@ -98,8 +98,7 @@ class _KidButtonState extends State<KidButton>
         scale: _scale,
         child: Container(
           width: double.infinity,
-          padding:
-              const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
           decoration: BoxDecoration(
             color: _bgColor,
             borderRadius: BorderRadius.circular(32),
@@ -114,25 +113,27 @@ class _KidButtonState extends State<KidButton>
                   ]
                 : null,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (widget.icon != null) ...[
-                Icon(widget.icon, color: _fgColor, size: 20),
-                const SizedBox(width: 8),
-              ],
-              if (widget.isLoading)
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    color: _fgColor,
-                    strokeWidth: 2,
-                  ),
-                )
-              else
-                Flexible(
-                  child: Text(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (widget.icon != null) ...[
+                  Icon(widget.icon, color: _fgColor, size: 20),
+                  const SizedBox(width: 8),
+                ],
+                if (widget.isLoading)
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      color: _fgColor,
+                      strokeWidth: 2,
+                    ),
+                  )
+                else
+                  Text(
                     widget.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -143,8 +144,8 @@ class _KidButtonState extends State<KidButton>
                       letterSpacing: 0.3,
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
