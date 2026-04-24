@@ -164,10 +164,10 @@ class SupabaseStorageService {
   Future<String> uploadStoryPageImage({
     required String userId,
     required String storyId,
-    required int pageNumber,
+    required String pageId,
     required File imageFile,
   }) async {
-    final String filePath = '$userId/pages/${storyId}_$pageNumber.jpg';
+    final String filePath = '$userId/pages/${storyId}_$pageId.jpg';
 
     try {
       await _storage.from(_storyImagesBucket).upload(

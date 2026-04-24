@@ -7,7 +7,7 @@ import 'package:drift/drift.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../database/app_database.dart';
-
+import '../services/storage_service.dart';
 /// The core offline-to-online synchronization engine.
 ///
 /// Responsible for draining the local [SyncQueues] table and pushing
@@ -199,7 +199,7 @@ class SyncEngineService {
   }
 
   // -------------------------------------------------------------------------
-  // Pending Count (for UI badges, etc.)
+  // Pending Count & Status Helpers
   // -------------------------------------------------------------------------
 
   /// Returns the number of records still waiting to be synced
@@ -212,6 +212,33 @@ class SyncEngineService {
       );
     final results = await query.get();
     return results.length;
+  }
+
+  /// Watches the sync status for a specific story ID.
+  /// Returns 'pending', 'syncing', 'failed', or 'synced'.
+  Stream<String> watchStorySyncStatus(String storyId) {
+    return _db.select(_db.syncQueues).watch().map((queues) {
+      bool isPending = false;
+      bool isSyncing = false;
+      bool hasFailed = false;
+
+      for (final q in queues) {
+        try {
+          final data = jsonDecode(q.payload);
+          final sid = data['story_id'] ?? data['id'];
+          if (sid == storyId) {
+            if (q.status == 'processing') isSyncing = true;
+            if (q.status == 'failed' || q.status == 'permanently_failed') hasFailed = true;
+            if (q.status == 'pending') isPending = true;
+          }
+        } catch (_) {}
+      }
+
+      if (isSyncing) return 'syncing';
+      if (hasFailed) return 'failed';
+      if (isPending) return 'pending';
+      return 'synced';
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -227,13 +254,43 @@ class SyncEngineService {
     switch (actionType) {
       // ── Stories ──────────────────────────────────────────────────────
       case 'CREATE_STORY':
-        await _supabase.from('stories').upsert(_toStoryRow(data));
-        break;
-
       case 'UPDATE_STORY':
+        if (data.containsKey('coverEmoji') && data['coverEmoji'] != null) {
+          final String curVal = data['coverEmoji'];
+          if (curVal.startsWith('/') || curVal.startsWith('file://') || curVal.contains(':\\')) {
+            final file = File(curVal.replaceFirst('file://', ''));
+            if (file.existsSync()) {
+              final storage = SupabaseStorageService();
+              final userId = _supabase.auth.currentUser?.id ?? '';
+              final storyId = data['id'] as String? ?? 'unknown';
+              
+              log('Uploading local cover image file to Supabase: ${file.path}', name: 'SyncEngine');
+              final remoteUrl = await storage.uploadStoryCover(
+                userId: userId,
+                storyId: storyId,
+                imageFile: file,
+              );
+              data['coverEmoji'] = remoteUrl;
+              
+              try {
+                await (_db.update(_db.storiesTable)..where((t) => t.id.equals(storyId)))
+                    .write(StoriesTableCompanion(coverEmoji: Value(remoteUrl)));
+              } catch (e) {
+                log('Failed to update local sqlite with remoteUrl: $e', name: 'SyncEngine');
+              }
+            } else {
+              throw SyncEngineException('Local cover image file not found before sync: $curVal');
+            }
+          }
+        }
+        
         final row = _toStoryRow(data);
-        final storyId = row.remove('id') as String;
-        await _supabase.from('stories').update(row).eq('id', storyId);
+        if (actionType == 'CREATE_STORY') {
+          await _supabase.from('stories').upsert(row);
+        } else {
+          final storyId = row.remove('id') as String;
+          await _supabase.from('stories').update(row).eq('id', storyId);
+        }
         break;
 
       case 'DELETE_STORY':
@@ -243,13 +300,47 @@ class SyncEngineService {
 
       // ── Story Pages ─────────────────────────────────────────────────
       case 'CREATE_STORY_PAGE':
-        await _supabase.from('story_pages').upsert(_toPageRow(data));
-        break;
-
       case 'UPDATE_STORY_PAGE':
-        final row = _toPageRow(data);
-        final pageId = row.remove('id') as String;
-        await _supabase.from('story_pages').update(row).eq('id', pageId);
+        if (data.containsKey('imageDescription') && data['imageDescription'] != null) {
+          final String imgDesc = data['imageDescription'];
+          // Check if it's a local file path
+          if (imgDesc.startsWith('/') || imgDesc.startsWith('file://') || imgDesc.contains(':\\')) {
+            final file = File(imgDesc.replaceFirst('file://', ''));
+            if (file.existsSync()) {
+              final storage = SupabaseStorageService();
+              final userId = _supabase.auth.currentUser?.id ?? '';
+              final storyId = data['story_id'] as String? ?? 'unknown';
+              final pageId = data['id'] as String? ?? 'unknown';
+              
+              log('Uploading local image file to Supabase: ${file.path}', name: 'SyncEngine');
+              final remoteUrl = await storage.uploadStoryPageImage(
+                userId: userId,
+                storyId: storyId,
+                pageId: pageId,
+                imageFile: file,
+              );
+              data['imageDescription'] = remoteUrl; // Replace local path with remote URL
+              
+              // Update local database to maintain parity
+              try {
+                await (_db.update(_db.storyPagesTable)..where((t) => t.id.equals(pageId)))
+                    .write(StoryPagesTableCompanion(imageDescription: Value(remoteUrl)));
+              } catch (e) {
+                log('Failed to update local sqlite with remoteUrl: $e', name: 'SyncEngine');
+              }
+            } else {
+              throw const SyncEngineException('Local image file not found. Cannot sync page image.');
+            }
+          }
+        }
+
+        if (actionType == 'CREATE_STORY_PAGE') {
+          await _supabase.from('story_pages').upsert(_toPageRow(data));
+        } else {
+          final row = _toPageRow(data);
+          final pageId = row.remove('id') as String;
+          await _supabase.from('story_pages').update(row).eq('id', pageId);
+        }
         break;
 
       case 'DELETE_STORY_PAGE':

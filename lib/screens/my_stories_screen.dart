@@ -1,9 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../models/story.dart';
 import '../providers/stories_provider.dart';
+import '../services/sync_engine_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/gradient_background.dart';
 import '../widgets/story_card.dart';
@@ -80,46 +82,71 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> {
     return Color(int.parse(hex, radix: 16));
   }
 
-  String getSyncStatus(Story story) {
-    return "synced";
+  Widget _buildCoverImage(String coverVal) {
+    if (coverVal.startsWith('http')) {
+      return Image.network(coverVal, fit: BoxFit.cover, width: double.infinity, height: double.infinity);
+    } else if (coverVal.startsWith('/') || coverVal.contains(':\\') || coverVal.startsWith('file://')) {
+      return Image.file(File(coverVal.replaceFirst('file://', '')), fit: BoxFit.cover, width: double.infinity, height: double.infinity);
+    }
+    return Center(child: Text(coverVal, style: const TextStyle(fontSize: 50)));
   }
 
-  Widget _buildSyncStatus(Story story) {
-    final status = getSyncStatus(story);
-    Color color;
-    switch (status.toLowerCase()) {
-      case 'synced':
-        color = Colors.green;
-        break;
-      case 'pending':
-        color = Colors.orange;
-        break;
-      case 'failed':
-        color = Colors.red;
-        break;
-      default:
-        color = Colors.grey;
-    }
+  Widget _buildSyncStatus(BuildContext context, Story story) {
+    final syncEngine = context.read<SyncEngineService>();
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          status.toLowerCase() == 'synced' ? Icons.check_circle_rounded : 
-          status.toLowerCase() == 'pending' ? Icons.sync_rounded : Icons.error_rounded,
-          size: 12,
-          color: color,
-        ),
-        const SizedBox(width: 4),
-        Text(
-          status,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: color,
-          ),
-        ),
-      ],
+    return StreamBuilder<String>(
+      stream: syncEngine.watchStorySyncStatus(story.id),
+      initialData: 'synced',
+      builder: (context, snapshot) {
+        final status = snapshot.data ?? 'synced';
+        Color color;
+        IconData icon;
+        
+        switch (status) {
+          case 'synced':
+            color = Colors.green;
+            icon = Icons.check_circle_rounded;
+            break;
+          case 'pending':
+            color = Colors.orange;
+            icon = Icons.sync_rounded;
+            break;
+          case 'syncing':
+            color = Colors.blue;
+            icon = Icons.autorenew_rounded;
+            break;
+          case 'failed':
+            color = Colors.red;
+            icon = Icons.error_rounded;
+            break;
+          default:
+            color = Colors.grey;
+            icon = Icons.help_outline_rounded;
+        }
+
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (status == 'syncing')
+              SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 2, color: color),
+              )
+            else
+              Icon(icon, size: 12, color: color),
+            const SizedBox(width: 4),
+            Text(
+              status,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -310,7 +337,7 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.only(left: 4, bottom: 6),
-              child: _buildSyncStatus(stories[i]),
+              child: _buildSyncStatus(context, stories[i]),
             ),
             StoryCard(
               story: stories[i],
@@ -366,10 +393,7 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> {
                       color: bgColor,
                       child: Stack(
                         children: [
-                          Center(
-                            child: Text(story.coverEmoji,
-                                style: const TextStyle(fontSize: 50)),
-                          ),
+                          _buildCoverImage(story.coverEmoji),
                           Positioned(
                             top: 6,
                             right: 6,
@@ -419,7 +443,7 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
-                        _buildSyncStatus(story),
+                        _buildSyncStatus(context, story),
                         const SizedBox(height: 6),
                         Row(
                           children: [

@@ -32,12 +32,27 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
   _SaveStatus _saveStatus = _SaveStatus.idle;
 
   static const _coverColors = [
-    '#FFD6E8', '#C0E5FF', '#C2F5E9', '#E5DEFF',
-    '#FFF3CD', '#FFE0B2', '#F8D7DA', '#D1ECF1',
+    '#FFD6E8',
+    '#C0E5FF',
+    '#C2F5E9',
+    '#E5DEFF',
+    '#FFF3CD',
+    '#FFE0B2',
+    '#F8D7DA',
+    '#D1ECF1',
   ];
 
   static const _coverEmojis = [
-    '📖', '🐉', '🦄', '🐰', '🧚', '🌟', '🦋', '🐬', '🌈', '🏰',
+    '📖',
+    '🐉',
+    '🦄',
+    '🐰',
+    '🧚',
+    '🌟',
+    '🦋',
+    '🐬',
+    '🌈',
+    '🏰',
   ];
 
   String _generateId() =>
@@ -51,19 +66,20 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
 
     if (!isNew) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        final story =
-            context.read<StoriesProvider>().getStory(widget.storyId!);
+        final story = context.read<StoriesProvider>().getStory(widget.storyId!);
         if (story != null) {
           setState(() {
             _titleController.text = story.title;
             _coverColor = story.coverColor;
             _coverEmoji = story.coverEmoji;
-            _pages = story.pages.map((p) => StoryPage(
-                  id: p.id,
-                  text: p.text,
-                  imageDescription: p.imageDescription,
-                  backgroundColor: p.backgroundColor,
-                )).toList();
+            _pages = story.pages
+                .map((p) => StoryPage(
+                      id: p.id,
+                      text: p.text,
+                      imageDescription: p.imageDescription,
+                      backgroundColor: p.backgroundColor,
+                    ))
+                .toList();
           });
         }
       });
@@ -119,10 +135,25 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
     }
   }
 
+  Future<void> _pickCoverImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    if (!mounted) return;
+
+    if (pickedFile != null) {
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _coverEmoji = pickedFile.path;
+        _showEmojiPicker = false;
+      });
+    }
+  }
+
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     try {
       final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+      if (!mounted) return;
       if (pickedFile != null) {
         _updateActivePage('image', pickedFile.path);
       }
@@ -162,8 +193,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                 _activePage = (_activePage - 1).clamp(0, _pages.length - 1);
               });
             },
-            style:
-                TextButton.styleFrom(foregroundColor: AppColors.destructive),
+            style: TextButton.styleFrom(foregroundColor: AppColors.destructive),
             child: const Text('Delete'),
           ),
         ],
@@ -259,8 +289,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
             SizedBox(width: 6),
             Text(
               'Saving...',
-              style: TextStyle(
-                  fontSize: 12, color: AppColors.mutedForeground),
+              style: TextStyle(fontSize: 12, color: AppColors.mutedForeground),
             ),
           ],
         );
@@ -273,8 +302,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
             SizedBox(width: 4),
             Text(
               'Saved!',
-              style:
-                  TextStyle(fontSize: 12, color: Color(0xFF4CAF50)),
+              style: TextStyle(fontSize: 12, color: Color(0xFF4CAF50)),
             ),
           ],
         ).animate().fadeIn(duration: 200.ms);
@@ -354,8 +382,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                     children: [
                       // Cover tap area
                       GestureDetector(
-                        onTap: () =>
-                            setState(() => _showEmojiPicker = !_showEmojiPicker),
+                        onTap: _pickCoverImage,
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           width: double.infinity,
@@ -365,7 +392,8 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                             borderRadius: BorderRadius.circular(24),
                             boxShadow: [
                               BoxShadow(
-                                color: _hexToColor(_coverColor).withValues(alpha: 0.5),
+                                color: _hexToColor(_coverColor)
+                                    .withValues(alpha: 0.5),
                                 blurRadius: 16,
                                 offset: const Offset(0, 6),
                               ),
@@ -374,8 +402,29 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                           child: Stack(
                             alignment: Alignment.center,
                             children: [
-                              Text(_coverEmoji,
-                                  style: const TextStyle(fontSize: 72)),
+                              if (_coverEmoji.startsWith('http'))
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(24),
+                                  child: Image.network(_coverEmoji,
+                                      fit: BoxFit.cover,
+                                      width: double.infinity,
+                                      height: double.infinity),
+                                )
+                              else if (_coverEmoji.startsWith('/') ||
+                                  _coverEmoji.contains(':\\') ||
+                                  _coverEmoji.startsWith('file://'))
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(24),
+                                  child: Image.file(
+                                      File(_coverEmoji.replaceFirst(
+                                          'file://', '')),
+                                      fit: BoxFit.cover,
+                                      width: double.infinity,
+                                      height: double.infinity),
+                                )
+                              else
+                                Text(_coverEmoji,
+                                    style: const TextStyle(fontSize: 72)),
                               Positioned(
                                 bottom: 10,
                                 right: 14,
@@ -401,36 +450,59 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                       if (_showEmojiPicker) ...[
                         const SizedBox(height: 8),
                         _card(
-                          child: Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: _coverEmojis.map((e) {
-                              return GestureDetector(
-                                onTap: () {
-                                  HapticFeedback.selectionClick();
-                                  setState(() {
-                                    _coverEmoji = e;
-                                    _showEmojiPicker = false;
-                                  });
-                                },
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 150),
-                                  width: 48,
-                                  height: 48,
-                                  decoration: BoxDecoration(
-                                    color: _coverEmoji == e
-                                        ? AppColors.muted
-                                        : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  child: Center(
-                                    child: Text(e,
-                                        style:
-                                            const TextStyle(fontSize: 28)),
-                                  ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              ElevatedButton.icon(
+                                onPressed: _pickCoverImage,
+                                icon: const Icon(Icons.photo_library_rounded),
+                                label: const Text('Upload Cover Image'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.background,
+                                  foregroundColor: AppColors.foreground,
+                                  elevation: 0,
+                                  side:
+                                      const BorderSide(color: AppColors.border),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16)),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
                                 ),
-                              );
-                            }).toList(),
+                              ),
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: _coverEmojis.map((e) {
+                                  return GestureDetector(
+                                    onTap: () {
+                                      HapticFeedback.selectionClick();
+                                      setState(() {
+                                        _coverEmoji = e;
+                                        _showEmojiPicker = false;
+                                      });
+                                    },
+                                    child: AnimatedContainer(
+                                      duration:
+                                          const Duration(milliseconds: 150),
+                                      width: 48,
+                                      height: 48,
+                                      decoration: BoxDecoration(
+                                        color: _coverEmoji == e
+                                            ? AppColors.muted
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      child: Center(
+                                        child: Text(e,
+                                            style:
+                                                const TextStyle(fontSize: 28)),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -461,8 +533,8 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                                 boxShadow: selected
                                     ? [
                                         BoxShadow(
-                                          color:
-                                              Colors.black.withValues(alpha: 0.22),
+                                          color: Colors.black
+                                              .withValues(alpha: 0.22),
                                           blurRadius: 6,
                                         )
                                       ]
@@ -484,8 +556,8 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                             const SizedBox(height: 4),
                             TextField(
                               controller: _titleController,
-                              onChanged: (_) =>
-                                  setState(() => _saveStatus = _SaveStatus.idle),
+                              onChanged: (_) => setState(
+                                  () => _saveStatus = _SaveStatus.idle),
                               style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w700,
@@ -494,8 +566,8 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                               decoration: const InputDecoration(
                                 border: InputBorder.none,
                                 hintText: 'Enter story title...',
-                                hintStyle: TextStyle(
-                                    color: AppColors.mutedForeground),
+                                hintStyle:
+                                    TextStyle(color: AppColors.mutedForeground),
                                 counterText: '',
                               ),
                               maxLength: 60,
@@ -564,8 +636,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                                 height: 46,
                                 margin: const EdgeInsets.only(right: 10),
                                 decoration: BoxDecoration(
-                                  color: _hexToColor(
-                                      _pages[i].backgroundColor),
+                                  color: _hexToColor(_pages[i].backgroundColor),
                                   borderRadius: BorderRadius.circular(14),
                                   border: active
                                       ? Border.all(
@@ -574,8 +645,8 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                                   boxShadow: active
                                       ? [
                                           BoxShadow(
-                                            color:
-                                                Colors.black.withValues(alpha: 0.2),
+                                            color: Colors.black
+                                                .withValues(alpha: 0.2),
                                             blurRadius: 6,
                                           )
                                         ]
@@ -611,27 +682,34 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                                 children: [
                                   Row(
                                     children: [
-                                      _label('PAGE ${_activePage + 1} OF ${_pages.length}'),
+                                      _label(
+                                          'PAGE ${_activePage + 1} OF ${_pages.length}'),
                                       const SizedBox(width: 16),
                                       GestureDetector(
-                                        onTap: _activePage > 0 ? _previousPage : null,
+                                        onTap: _activePage > 0
+                                            ? _previousPage
+                                            : null,
                                         child: Icon(
                                           Icons.arrow_back_ios_rounded,
                                           size: 14,
                                           color: _activePage > 0
                                               ? AppColors.foreground
-                                              : AppColors.mutedForeground.withValues(alpha: 0.4),
+                                              : AppColors.mutedForeground
+                                                  .withValues(alpha: 0.4),
                                         ),
                                       ),
                                       const SizedBox(width: 12),
                                       GestureDetector(
-                                        onTap: _activePage < _pages.length - 1 ? _nextPage : null,
+                                        onTap: _activePage < _pages.length - 1
+                                            ? _nextPage
+                                            : null,
                                         child: Icon(
                                           Icons.arrow_forward_ios_rounded,
                                           size: 14,
                                           color: _activePage < _pages.length - 1
                                               ? AppColors.foreground
-                                              : AppColors.mutedForeground.withValues(alpha: 0.4),
+                                              : AppColors.mutedForeground
+                                                  .withValues(alpha: 0.4),
                                         ),
                                       ),
                                     ],
@@ -643,8 +721,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                                           horizontal: 10, vertical: 4),
                                       decoration: BoxDecoration(
                                         color: const Color(0xFFFFE5EA),
-                                        borderRadius:
-                                            BorderRadius.circular(12),
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: const Row(
                                         children: [
@@ -691,29 +768,45 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                                   ),
                                   child: currentPage.imageDescription.isNotEmpty
                                       ? ClipRRect(
-                                          borderRadius: BorderRadius.circular(11),
+                                          borderRadius:
+                                              BorderRadius.circular(11),
                                           child: Stack(
                                             fit: StackFit.expand,
                                             children: [
                                               Image.file(
-                                                File(currentPage.imageDescription),
+                                                File(currentPage
+                                                    .imageDescription),
                                                 fit: BoxFit.cover,
-                                                errorBuilder: (ctx, err, stk) => const Center(
-                                                  child: Icon(Icons.broken_image_rounded, color: AppColors.mutedForeground, size: 40),
+                                                errorBuilder: (ctx, err, stk) =>
+                                                    const Center(
+                                                  child: Icon(
+                                                      Icons
+                                                          .broken_image_rounded,
+                                                      color: AppColors
+                                                          .mutedForeground,
+                                                      size: 40),
                                                 ),
                                               ),
                                               Positioned(
                                                 bottom: 8,
                                                 right: 8,
                                                 child: GestureDetector(
-                                                  onTap: () => _updateActivePage('image', ''),
+                                                  onTap: () =>
+                                                      _updateActivePage(
+                                                          'image', ''),
                                                   child: Container(
-                                                    padding: const EdgeInsets.all(6),
+                                                    padding:
+                                                        const EdgeInsets.all(6),
                                                     decoration: BoxDecoration(
-                                                      color: Colors.black.withValues(alpha: 0.6),
+                                                      color: Colors.black
+                                                          .withValues(
+                                                              alpha: 0.6),
                                                       shape: BoxShape.circle,
                                                     ),
-                                                    child: const Icon(Icons.delete_rounded, color: Colors.white, size: 16),
+                                                    child: const Icon(
+                                                        Icons.delete_rounded,
+                                                        color: Colors.white,
+                                                        size: 16),
                                                   ),
                                                 ),
                                               ),
@@ -721,15 +814,21 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                                           ),
                                         )
                                       : const Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
                                           children: [
-                                            Icon(Icons.add_photo_alternate_rounded,
-                                                color: AppColors.mutedForeground, size: 36),
+                                            Icon(
+                                                Icons
+                                                    .add_photo_alternate_rounded,
+                                                color:
+                                                    AppColors.mutedForeground,
+                                                size: 36),
                                             SizedBox(height: 6),
                                             Text(
                                               'Tap to select image',
                                               style: TextStyle(
-                                                color: AppColors.mutedForeground,
+                                                color:
+                                                    AppColors.mutedForeground,
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.w500,
                                               ),
@@ -745,8 +844,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                                 spacing: 8,
                                 runSpacing: 6,
                                 children: _coverColors.map((c) {
-                                  final sel =
-                                      currentPage.backgroundColor == c;
+                                  final sel = currentPage.backgroundColor == c;
                                   return GestureDetector(
                                     onTap: () {
                                       HapticFeedback.selectionClick();
@@ -759,12 +857,10 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                                       height: 30,
                                       decoration: BoxDecoration(
                                         color: _hexToColor(c),
-                                        borderRadius:
-                                            BorderRadius.circular(15),
+                                        borderRadius: BorderRadius.circular(15),
                                         border: sel
                                             ? Border.all(
-                                                color: Colors.white,
-                                                width: 3)
+                                                color: Colors.white, width: 3)
                                             : null,
                                         boxShadow: sel
                                             ? [
@@ -807,8 +903,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                               onPressed: _saveStatus == _SaveStatus.saving
                                   ? () {}
                                   : () => _save(),
-                              isLoading:
-                                  _saveStatus == _SaveStatus.saving,
+                              isLoading: _saveStatus == _SaveStatus.saving,
                             ),
                           ),
                         ],
@@ -910,18 +1005,15 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
         fillColor: AppColors.input,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide:
-              const BorderSide(color: AppColors.border, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.border, width: 1.5),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide:
-              const BorderSide(color: AppColors.border, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.border, width: 1.5),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide:
-              const BorderSide(color: AppColors.primary, width: 1.8),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.8),
         ),
         contentPadding: const EdgeInsets.all(12),
       ),

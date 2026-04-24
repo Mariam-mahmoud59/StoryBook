@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/story.dart';
@@ -52,6 +53,15 @@ class _StoryCardState extends State<StoryCard>
     return Color(int.parse(hex, radix: 16));
   }
 
+  Widget _buildCoverImage(String coverVal) {
+    if (coverVal.startsWith('http')) {
+      return Image.network(coverVal, fit: BoxFit.cover, width: double.infinity, height: double.infinity);
+    } else if (coverVal.startsWith('/') || coverVal.contains(':\\') || coverVal.startsWith('file://')) {
+      return Image.file(File(coverVal.replaceFirst('file://', '')), fit: BoxFit.cover, width: double.infinity, height: double.infinity);
+    }
+    return Center(child: Text(coverVal, style: const TextStyle(fontSize: 64)));
+  }
+
   String _timeAgo(DateTime date) {
     final diff = DateTime.now().difference(date);
     if (diff.inDays == 0) return 'Today';
@@ -99,12 +109,7 @@ class _StoryCardState extends State<StoryCard>
                   color: coverColor,
                   child: Stack(
                     children: [
-                      Center(
-                        child: Text(
-                          widget.story.coverEmoji,
-                          style: const TextStyle(fontSize: 64),
-                        ),
-                      ),
+                      _buildCoverImage(widget.story.coverEmoji),
                       Positioned(
                         bottom: 10,
                         right: 12,

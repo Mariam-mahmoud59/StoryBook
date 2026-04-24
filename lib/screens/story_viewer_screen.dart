@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/stories_provider.dart';
 import '../theme/app_colors.dart';
+import 'dart:io';
 
 class StoryViewerScreen extends StatefulWidget {
   final String storyId;
@@ -29,6 +30,66 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
     hex = hex.replaceAll('#', '');
     if (hex.length == 6) hex = 'FF$hex';
     return Color(int.parse(hex, radix: 16));
+  }
+
+  Widget _buildImage(String imageDesc, String emoji) {
+    if (imageDesc.isEmpty) {
+      return Text(emoji, style: const TextStyle(fontSize: 100));
+    }
+
+    if (imageDesc.startsWith('http://') || imageDesc.startsWith('https://')) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Image.network(
+          imageDesc,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => Text(emoji, style: const TextStyle(fontSize: 100)),
+        ),
+      );
+    }
+
+    String localPath = imageDesc;
+    if (imageDesc.startsWith('file://')) {
+      localPath = imageDesc.replaceFirst('file://', '');
+    }
+
+    if (localPath.startsWith('/') || localPath.contains(':\\')) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Image.file(
+          File(localPath),
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => Text(emoji, style: const TextStyle(fontSize: 100)),
+        ),
+      );
+    }
+
+    // Default case if it's text
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(emoji, style: const TextStyle(fontSize: 100)),
+        const SizedBox(height: 16),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.image_outlined, size: 14, color: Colors.black38),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                imageDesc,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Colors.black38,
+                  fontStyle: FontStyle.italic,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
   void _goToPage(int next, int total) {
@@ -212,41 +273,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
                             color: Colors.white.withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(28),
                           ),
-                          child: Column(
-                            children: [
-                              Text(
-                                story.coverEmoji,
-                                style: const TextStyle(fontSize: 90),
-                              ),
-                              if (page != null &&
-                                  page.imageDescription.isNotEmpty) ...[
-                                const SizedBox(height: 12),
-                                Row(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    const Icon(
-                                      Icons.image_outlined,
-                                      size: 14,
-                                      color: Colors.black38,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        page.imageDescription,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.black38,
-                                          fontStyle: FontStyle.italic,
-                                          height: 1.4,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ],
-                          ),
+                          child: page != null
+                              ? _buildImage(page.imageDescription, story.coverEmoji)
+                              : Text(story.coverEmoji, style: const TextStyle(fontSize: 90)),
                         ),
 
                         const SizedBox(height: 20),

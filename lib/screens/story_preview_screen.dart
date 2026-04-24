@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../providers/stories_provider.dart';
 import '../theme/app_colors.dart';
+import 'dart:io';
 
 class StoryPreviewScreen extends StatefulWidget {
   final String storyId;
@@ -27,6 +28,63 @@ class _StoryPreviewScreenState extends State<StoryPreviewScreen> {
     hex = hex.replaceAll('#', '');
     if (hex.length == 6) hex = 'FF$hex';
     return Color(int.parse(hex, radix: 16));
+  }
+
+  Widget _buildImage(String imageDesc, String emoji) {
+    if (imageDesc.isEmpty) {
+      return Text(emoji, style: const TextStyle(fontSize: 100))
+          .animate()
+          .scale(duration: 400.ms, curve: Curves.elasticOut);
+    }
+
+    if (imageDesc.startsWith('http://') || imageDesc.startsWith('https://')) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Image.network(
+          imageDesc,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => Text(emoji, style: const TextStyle(fontSize: 100)),
+        ),
+      );
+    }
+
+    String localPath = imageDesc;
+    if (imageDesc.startsWith('file://')) {
+      localPath = imageDesc.replaceFirst('file://', '');
+    }
+
+    if (localPath.startsWith('/') || localPath.contains(':\\')) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Image.file(
+          File(localPath),
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => Text(emoji, style: const TextStyle(fontSize: 100)),
+        ),
+      );
+    }
+
+    // Default case if it's text
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(emoji, style: const TextStyle(fontSize: 100)),
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            imageDesc,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.black.withValues(alpha: 0.45),
+              fontStyle: FontStyle.italic,
+              height: 1.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ],
+    ).animate().scale(duration: 400.ms, curve: Curves.elasticOut);
   }
 
   @override
@@ -76,30 +134,14 @@ class _StoryPreviewScreenState extends State<StoryPreviewScreen> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text(
-                                  story.coverEmoji,
-                                  style: const TextStyle(fontSize: 100),
-                                ).animate().scale(
-                                      duration: 400.ms,
-                                      curve: Curves.elasticOut,
-                                    ),
-                                if (page.imageDescription.isNotEmpty) ...[
-                                  const SizedBox(height: 16),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 24),
-                                    child: Text(
-                                      page.imageDescription,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.black.withValues(alpha: 0.45),
-                                        fontStyle: FontStyle.italic,
-                                        height: 1.5,
-                                      ),
-                                      textAlign: TextAlign.center,
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16.0),
+                                    child: Center(
+                                      child: _buildImage(page.imageDescription, story.coverEmoji),
                                     ),
                                   ),
-                                ],
+                                ),
                               ],
                             ),
                           ),

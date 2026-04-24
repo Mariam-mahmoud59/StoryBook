@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -469,10 +470,21 @@ class _HomeScreenState extends State<HomeScreen>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    story.coverEmoji as String,
-                    style: const TextStyle(fontSize: 38),
-                  ),
+                  if ((story.coverEmoji as String).startsWith('http'))
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.network(story.coverEmoji as String, fit: BoxFit.cover, width: 60, height: 60),
+                    )
+                  else if ((story.coverEmoji as String).startsWith('/') || (story.coverEmoji as String).contains(':\\') || (story.coverEmoji as String).startsWith('file://'))
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.file(File((story.coverEmoji as String).replaceFirst('file://', '')), fit: BoxFit.cover, width: 60, height: 60),
+                    )
+                  else
+                    Text(
+                      story.coverEmoji as String,
+                      style: const TextStyle(fontSize: 38),
+                    ),
                   const SizedBox(height: 10),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 10),

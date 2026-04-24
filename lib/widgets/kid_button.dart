@@ -99,7 +99,7 @@ class _KidButtonState extends State<KidButton>
         child: Container(
           width: double.infinity,
           padding:
-              const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+              const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
           decoration: BoxDecoration(
             color: _bgColor,
             borderRadius: BorderRadius.circular(32),
@@ -118,8 +118,8 @@ class _KidButtonState extends State<KidButton>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (widget.icon != null) ...[
-                Icon(widget.icon, color: _fgColor, size: 22),
-                const SizedBox(width: 10),
+                Icon(widget.icon, color: _fgColor, size: 20),
+                const SizedBox(width: 8),
               ],
               if (widget.isLoading)
                 SizedBox(
@@ -131,13 +131,17 @@ class _KidButtonState extends State<KidButton>
                   ),
                 )
               else
-                Text(
-                  widget.label,
-                  style: TextStyle(
-                    color: _fgColor,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
+                Flexible(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: _fgColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
+                    ),
                   ),
                 ),
             ],

@@ -53,6 +53,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
+        Provider<SyncEngineService>.value(value: syncEngine),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => StoriesProvider(storyRepository: storyRepository)..loadStories()),
       ],
