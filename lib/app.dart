@@ -15,6 +15,7 @@ import 'screens/story_viewer_screen.dart';
 import 'screens/story_preview_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/verify_email_screen.dart';
+import 'screens/profile_screen.dart';
 
 class StorybookApp extends StatefulWidget {
   const StorybookApp({super.key});
@@ -30,7 +31,8 @@ class _StorybookAppState extends State<StorybookApp> {
   @override
   void initState() {
     super.initState();
-    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+    _authSubscription =
+        Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       if (data.event == AuthChangeEvent.passwordRecovery) {
         // Clear everything and force navigate to update password
         _navigatorKey.currentState?.pushNamedAndRemoveUntil(
@@ -104,6 +106,7 @@ class _StorybookAppState extends State<StorybookApp> {
         '/': (context) => const HomeScreen(),
         '/stories': (context) => const MyStoriesScreen(),
         '/settings': (context) => const SettingsScreen(),
+        '/profile': (context) => const ProfileScreen(),
         '/verify-email': (context) => const VerifyEmailScreen(),
       },
       onGenerateRoute: (settings) {

@@ -161,6 +161,30 @@ class SupabaseAuthService {
   }
 
   // ---------------------------------------------------------------------------
+  // Update Profile
+  // ---------------------------------------------------------------------------
+
+  /// Updates current user profile metadata (e.g. name, avatar URL).
+  ///
+  /// Returns a [UserResponse] that includes the updated user when successful.
+  Future<UserResponse> updateProfile(Map<String, dynamic> data) async {
+    try {
+      final response = await _auth.updateUser(
+        UserAttributes(data: data),
+      );
+      return response;
+    } on AuthException catch (e) {
+      log('UpdateProfile failed: ${e.message}', name: 'SupabaseAuthService');
+      throw AuthServiceException('Profile update failed: ${e.message}');
+    } catch (e) {
+      log('UpdateProfile unexpected error: $e', name: 'SupabaseAuthService');
+      throw const AuthServiceException(
+        'An unexpected error occurred while updating profile.',
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Sign Out
   // ---------------------------------------------------------------------------
 

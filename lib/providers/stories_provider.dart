@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 import '../models/story.dart';
 import '../repositories/story_repository.dart';
 
 class StoriesProvider extends ChangeNotifier {
+  static const Uuid _uuid = Uuid();
   final StoryRepository _storyRepository;
   List<Story> _stories = [];
 
@@ -34,7 +36,7 @@ class StoriesProvider extends ChangeNotifier {
     required String coverEmoji,
     required List<StoryPage> pages,
   }) async {
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    final id = _uuid.v4();
     final now = DateTime.now();
     final story = Story(
       id: id,
@@ -81,6 +83,15 @@ class StoriesProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> clearAllStories() async {
+    final ids = _stories.map((s) => s.id).toList();
+    for (final id in ids) {
+      await _storyRepository.deleteStory(id);
+    }
+    _stories = [];
+    notifyListeners();
+  }
+
   Story? getStory(String id) {
     try {
       return _stories.firstWhere((s) => s.id == id);
@@ -89,4 +100,3 @@ class StoriesProvider extends ChangeNotifier {
     }
   }
 }
-

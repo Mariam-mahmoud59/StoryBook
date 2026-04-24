@@ -1,9 +1,11 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 import '../models/story.dart';
 import '../providers/stories_provider.dart';
 import '../theme/app_colors.dart';
@@ -21,15 +23,27 @@ class StoryEditorScreen extends StatefulWidget {
 }
 
 class _StoryEditorScreenState extends State<StoryEditorScreen> {
+  static const Uuid _uuid = Uuid();
+  static const List<String> _storySuggestions = [
+    'Once upon a time...',
+    'Suddenly...',
+    'The hero discovered...',
+    'A new friend appeared...',
+    'Then something magical happened...',
+    'They learned an important lesson...',
+  ];
   bool get isNew => widget.storyId == null;
 
   late TextEditingController _titleController;
+  late TextEditingController _storyTextController;
+  late FocusNode _storyTextFocusNode;
   String _coverColor = '#FFD6E8';
   String _coverEmoji = '📖';
   List<StoryPage> _pages = [];
   int _activePage = 0;
   bool _showEmojiPicker = false;
   _SaveStatus _saveStatus = _SaveStatus.idle;
+  String? _boundPageId;
 
   static const _coverColors = [
     '#FFD6E8',
@@ -55,14 +69,16 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
     '🏰',
   ];
 
-  String _generateId() =>
-      '${DateTime.now().millisecondsSinceEpoch}${DateTime.now().microsecond % 9999}';
+  String _generateId() => _uuid.v4();
 
   @override
   void initState() {
     super.initState();
     _titleController = TextEditingController(text: 'My New Story');
+    _storyTextController = TextEditingController();
+    _storyTextFocusNode = FocusNode();
     _pages = [StoryPage(id: _generateId(), backgroundColor: _coverColors[0])];
+    _bindStoryTextToActivePage();
 
     if (!isNew) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -80,6 +96,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                       backgroundColor: p.backgroundColor,
                     ))
                 .toList();
+            _bindStoryTextToActivePage();
           });
         }
       });
@@ -89,7 +106,46 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
   @override
   void dispose() {
     _titleController.dispose();
+    _storyTextController.dispose();
+    _storyTextFocusNode.dispose();
     super.dispose();
+  }
+
+  void _bindStoryTextToActivePage() {
+    if (_pages.isEmpty) return;
+    final page = _pages[_activePage];
+    if (_boundPageId == page.id && _storyTextController.text == page.text) {
+      return;
+    }
+    _boundPageId = page.id;
+    _storyTextController.value = TextEditingValue(
+      text: page.text,
+      selection: TextSelection.collapsed(offset: page.text.length),
+    );
+  }
+
+  void _insertSuggestion(String suggestion) {
+    final text = _storyTextController.text;
+    final selection = _storyTextController.selection;
+    final hasSelection = selection.start >= 0 && selection.end >= 0;
+    final start = hasSelection ? selection.start : text.length;
+    final end = hasSelection ? selection.end : text.length;
+
+    final prefix = text.substring(0, start);
+    final suffix = text.substring(end);
+    final needsSpaceBefore = prefix.isNotEmpty && !prefix.endsWith(' ');
+    final needsSpaceAfter = suffix.isNotEmpty && !suffix.startsWith(' ');
+    final insertion =
+        '${needsSpaceBefore ? ' ' : ''}$suggestion${needsSpaceAfter ? ' ' : ''}';
+    final nextText = '$prefix$insertion$suffix';
+    final nextOffset = prefix.length + insertion.length;
+
+    _storyTextController.value = TextEditingValue(
+      text: nextText,
+      selection: TextSelection.collapsed(offset: nextOffset),
+    );
+    _updateActivePage('text', nextText);
+    _storyTextFocusNode.requestFocus();
   }
 
   Color _hexToColor(String hex) {
@@ -111,27 +167,34 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
   }
 
   void _addPage() {
-    HapticFeedback.lightImpact();
+    HapticFeedback.mediumImpact();
     setState(() {
       _pages.add(StoryPage(
         id: _generateId(),
         backgroundColor: _coverColors[_pages.length % _coverColors.length],
       ));
       _activePage = _pages.length - 1;
+      _bindStoryTextToActivePage();
     });
   }
 
   void _nextPage() {
     if (_activePage < _pages.length - 1) {
       HapticFeedback.lightImpact();
-      setState(() => _activePage++);
+      setState(() {
+        _activePage++;
+        _bindStoryTextToActivePage();
+      });
     }
   }
 
   void _previousPage() {
     if (_activePage > 0) {
       HapticFeedback.lightImpact();
-      setState(() => _activePage--);
+      setState(() {
+        _activePage--;
+        _bindStoryTextToActivePage();
+      });
     }
   }
 
@@ -155,6 +218,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
       final pickedFile = await picker.pickImage(source: ImageSource.gallery);
       if (!mounted) return;
       if (pickedFile != null) {
+        HapticFeedback.mediumImpact();
         _updateActivePage('image', pickedFile.path);
       }
     } catch (e) {
@@ -176,13 +240,16 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Delete Page'),
-        content: const Text('Remove this page?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        title: const Text('Delete Page',
+            style: TextStyle(fontWeight: FontWeight.w900)),
+        content: const Text(
+            'Are you sure you want to remove this page? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: const Text('Cancel',
+                style: TextStyle(fontWeight: FontWeight.w600)),
           ),
           TextButton(
             onPressed: () {
@@ -191,10 +258,12 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
               setState(() {
                 _pages.removeAt(_activePage);
                 _activePage = (_activePage - 1).clamp(0, _pages.length - 1);
+                _bindStoryTextToActivePage();
               });
             },
             style: TextButton.styleFrom(foregroundColor: AppColors.destructive),
-            child: const Text('Delete'),
+            child: const Text('Delete',
+                style: TextStyle(fontWeight: FontWeight.w900)),
           ),
         ],
       ),
@@ -216,7 +285,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
     final provider = context.read<StoriesProvider>();
 
     if (isNew) {
-      final id = provider.addStory(
+      final id = await provider.addStory(
         title: _titleController.text.trim(),
         coverColor: _coverColor,
         coverEmoji: _coverEmoji,
@@ -250,19 +319,21 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
   void _openPreview() {
     final id = widget.storyId ?? 'unsaved';
     if (isNew) {
-      // Save first, then preview
       final provider = context.read<StoriesProvider>();
-      final savedId = provider.addStory(
+      provider
+          .addStory(
         title: _titleController.text.trim().isEmpty
             ? 'My New Story'
             : _titleController.text.trim(),
         coverColor: _coverColor,
         coverEmoji: _coverEmoji,
         pages: _pages,
-      );
-      Navigator.pushNamed(context, '/preview/$savedId');
+      )
+          .then((savedId) {
+        if (!mounted) return;
+        Navigator.pushNamed(context, '/preview/$savedId');
+      });
     } else {
-      // Save silently then preview
       _save(andNavigate: false).then((_) {
         if (mounted) {
           Navigator.pushNamed(context, '/preview/$id');
@@ -274,22 +345,25 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
   Widget _saveIndicator() {
     switch (_saveStatus) {
       case _SaveStatus.saving:
-        return const Row(
+        return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
-              width: 12,
-              height: 12,
+              width: 14,
+              height: 14,
               child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor:
-                    AlwaysStoppedAnimation<Color>(AppColors.mutedForeground),
+                strokeWidth: 2.5,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                    AppColors.primary.withOpacity(0.7)),
               ),
             ),
-            SizedBox(width: 6),
-            Text(
+            const SizedBox(width: 8),
+            const Text(
               'Saving...',
-              style: TextStyle(fontSize: 12, color: AppColors.mutedForeground),
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.mutedForeground),
             ),
           ],
         );
@@ -298,14 +372,20 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.check_circle_rounded,
-                size: 14, color: Color(0xFF4CAF50)),
-            SizedBox(width: 4),
+                size: 16, color: Color(0xFF4CAF50)),
+            SizedBox(width: 6),
             Text(
               'Saved!',
-              style: TextStyle(fontSize: 12, color: Color(0xFF4CAF50)),
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF4CAF50)),
             ),
           ],
-        ).animate().fadeIn(duration: 200.ms);
+        )
+            .animate()
+            .fadeIn(duration: 200.ms)
+            .scale(begin: const Offset(0.9, 0.9));
       case _SaveStatus.idle:
         return const SizedBox.shrink();
     }
@@ -323,12 +403,12 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
             children: [
               // Header
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
                 child: Row(
                   children: [
                     _iconBtn(
                       Icons.close_rounded,
-                      Colors.white.withValues(alpha: 0.8),
+                      Colors.white.withOpacity(0.8),
                       AppColors.foreground,
                       () => Navigator.pop(context),
                     ),
@@ -338,35 +418,22 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                           Text(
                             isNew ? 'New Story' : 'Edit Story',
                             style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
                               color: AppColors.foreground,
+                              letterSpacing: -0.5,
                             ),
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 4),
                           _saveIndicator(),
                         ],
                       ),
                     ),
-                    Row(
-                      children: [
-                        _iconBtn(
-                          Icons.play_arrow_rounded,
-                          AppColors.secondary,
-                          AppColors.foreground,
-                          _openPreview,
-                          tooltip: 'Preview',
-                        ),
-                        const SizedBox(width: 8),
-                        _iconBtn(
-                          Icons.check_rounded,
-                          AppColors.primary,
-                          Colors.white,
-                          _saveStatus == _SaveStatus.saving
-                              ? null
-                              : () => _save(),
-                        ),
-                      ],
+                    _iconBtn(
+                      Icons.more_horiz_rounded,
+                      Colors.white.withOpacity(0.8),
+                      AppColors.foreground,
+                      () {},
                     ),
                   ],
                 ),
@@ -374,106 +441,118 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
 
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Cover tap area
-                      GestureDetector(
-                        onTap: _pickCoverImage,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          width: double.infinity,
-                          height: 150,
-                          decoration: BoxDecoration(
-                            color: _hexToColor(_coverColor),
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                color: _hexToColor(_coverColor)
-                                    .withValues(alpha: 0.5),
-                                blurRadius: 16,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              if (_coverEmoji.startsWith('http'))
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(24),
-                                  child: Image.network(_coverEmoji,
-                                      fit: BoxFit.cover,
-                                      width: double.infinity,
-                                      height: double.infinity),
-                                )
-                              else if (_coverEmoji.startsWith('/') ||
-                                  _coverEmoji.contains(':\\') ||
-                                  _coverEmoji.startsWith('file://'))
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(24),
-                                  child: Image.file(
-                                      File(_coverEmoji.replaceFirst(
-                                          'file://', '')),
-                                      fit: BoxFit.cover,
-                                      width: double.infinity,
-                                      height: double.infinity),
-                                )
-                              else
-                                Text(_coverEmoji,
-                                    style: const TextStyle(fontSize: 72)),
-                              Positioned(
-                                bottom: 10,
-                                right: 14,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 4),
+                      const SizedBox(height: 12),
+                      // Cover Preview Section
+                      Center(
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            GestureDetector(
+                              onTap: () => setState(
+                                  () => _showEmojiPicker = !_showEmojiPicker),
+                              child: Hero(
+                                tag: 'story_cover',
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 400),
+                                  width: 160,
+                                  height: 160,
                                   decoration: BoxDecoration(
-                                    color: Colors.black26,
-                                    borderRadius: BorderRadius.circular(12),
+                                    color: _hexToColor(_coverColor),
+                                    borderRadius: BorderRadius.circular(40),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: _hexToColor(_coverColor)
+                                            .withOpacity(0.4),
+                                        blurRadius: 25,
+                                        offset: const Offset(0, 12),
+                                      ),
+                                      BoxShadow(
+                                        color: Colors.white.withOpacity(0.5),
+                                        blurRadius: 0,
+                                        offset: const Offset(0, 0),
+                                        spreadRadius: -4,
+                                      ),
+                                    ],
+                                    border: Border.all(
+                                        color: Colors.white.withOpacity(0.6),
+                                        width: 2),
                                   ),
-                                  child: const Text(
-                                    '✏️ Tap to change',
-                                    style: TextStyle(
-                                        fontSize: 11, color: Colors.white),
+                                  child: Center(
+                                    child:
+                                        _buildCoverEmoji(_coverEmoji, size: 72),
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: GestureDetector(
+                                onTap: () => setState(
+                                    () => _showEmojiPicker = !_showEmojiPicker),
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                        color: Colors.white, width: 3),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color:
+                                            AppColors.primary.withOpacity(0.3),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
+                                      )
+                                    ],
+                                  ),
+                                  child: const Icon(Icons.edit_rounded,
+                                      color: Colors.white, size: 18),
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                            .animate()
+                            .scale(duration: 500.ms, curve: Curves.easeOutBack),
                       ),
 
                       if (_showEmojiPicker) ...[
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 24),
                         _card(
+                          padding: const EdgeInsets.all(20),
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              ElevatedButton.icon(
-                                onPressed: _pickCoverImage,
-                                icon: const Icon(Icons.photo_library_rounded),
-                                label: const Text('Upload Cover Image'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.background,
-                                  foregroundColor: AppColors.foreground,
-                                  elevation: 0,
-                                  side:
-                                      const BorderSide(color: AppColors.border),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16)),
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 12),
-                                ),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  _label('CHOOSE COVER'),
+                                  GestureDetector(
+                                    onTap: _pickCoverImage,
+                                    child: Text(
+                                      'Upload Photo',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 16),
                               Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
+                                spacing: 12,
+                                runSpacing: 12,
                                 children: _coverEmojis.map((e) {
+                                  final selected = _coverEmoji == e;
                                   return GestureDetector(
                                     onTap: () {
                                       HapticFeedback.selectionClick();
@@ -484,14 +563,20 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                                     },
                                     child: AnimatedContainer(
                                       duration:
-                                          const Duration(milliseconds: 150),
-                                      width: 48,
-                                      height: 48,
+                                          const Duration(milliseconds: 200),
+                                      width: 52,
+                                      height: 52,
                                       decoration: BoxDecoration(
-                                        color: _coverEmoji == e
-                                            ? AppColors.muted
-                                            : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(14),
+                                        color: selected
+                                            ? AppColors.primary.withOpacity(0.1)
+                                            : Colors.white.withOpacity(0.5),
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: selected
+                                              ? AppColors.primary
+                                              : Colors.transparent,
+                                          width: 2,
+                                        ),
                                       ),
                                       child: Center(
                                         child: Text(e,
@@ -504,161 +589,165 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                               ),
                             ],
                           ),
-                        ),
+                        ).animate().fadeIn().slideY(begin: -0.1),
                       ],
 
-                      const SizedBox(height: 10),
-
-                      // Color row
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 8,
-                        children: _coverColors.map((c) {
-                          final selected = _coverColor == c;
-                          return GestureDetector(
-                            onTap: () {
-                              HapticFeedback.selectionClick();
-                              setState(() => _coverColor = c);
-                            },
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                color: _hexToColor(c),
-                                borderRadius: BorderRadius.circular(17),
-                                border: selected
-                                    ? Border.all(color: Colors.white, width: 3)
+                      const SizedBox(height: 24),
+                      _label('STORY COLOR'),
+                      const SizedBox(height: 12),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        child: Row(
+                          children: _coverColors.map((c) {
+                            final selected = _coverColor == c;
+                            return GestureDetector(
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                setState(() => _coverColor = c);
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                width: 42,
+                                height: 42,
+                                margin: const EdgeInsets.only(right: 12),
+                                decoration: BoxDecoration(
+                                  color: _hexToColor(c),
+                                  borderRadius: BorderRadius.circular(21),
+                                  border: Border.all(
+                                    color: selected
+                                        ? Colors.white
+                                        : Colors.transparent,
+                                    width: 3,
+                                  ),
+                                  boxShadow: [
+                                    if (selected)
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.15),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 4),
+                                      )
+                                  ],
+                                ),
+                                child: selected
+                                    ? const Icon(Icons.check,
+                                        color: Colors.white, size: 20)
                                     : null,
-                                boxShadow: selected
-                                    ? [
-                                        BoxShadow(
-                                          color: Colors.black
-                                              .withValues(alpha: 0.22),
-                                          blurRadius: 6,
-                                        )
-                                      ]
-                                    : null,
                               ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      // Title card
-                      _card(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _label('STORY TITLE'),
-                            const SizedBox(height: 4),
-                            TextField(
-                              controller: _titleController,
-                              onChanged: (_) => setState(
-                                  () => _saveStatus = _SaveStatus.idle),
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.foreground,
-                              ),
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                hintText: 'Enter story title...',
-                                hintStyle:
-                                    TextStyle(color: AppColors.mutedForeground),
-                                counterText: '',
-                              ),
-                              maxLength: 60,
-                            ),
-                          ],
+                            );
+                          }).toList(),
                         ),
                       ),
 
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 28),
+                      _label('STORY TITLE'),
+                      const SizedBox(height: 12),
+                      _card(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 4),
+                        child: TextField(
+                          controller: _titleController,
+                          onChanged: (_) =>
+                              setState(() => _saveStatus = _SaveStatus.idle),
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.foreground,
+                            letterSpacing: -0.5,
+                          ),
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            hintText: 'Enter story title...',
+                            hintStyle: TextStyle(
+                                color: AppColors.mutedForeground,
+                                fontWeight: FontWeight.w500),
+                            counterText: '',
+                          ),
+                          maxLength: 60,
+                        ),
+                      ),
 
-                      // Pages header
+                      const SizedBox(height: 32),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'Pages (${_pages.length})',
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
+                          const Text(
+                            'Story Pages',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
                               color: AppColors.foreground,
+                              letterSpacing: -0.5,
                             ),
                           ),
-                          GestureDetector(
-                            onTap: _addPage,
-                            child: Container(
+                          TextButton.icon(
+                            onPressed: _addPage,
+                            icon: const Icon(Icons.add_rounded, size: 18),
+                            label: const Text('Add Page'),
+                            style: TextButton.styleFrom(
+                              backgroundColor:
+                                  AppColors.primary.withOpacity(0.1),
+                              foregroundColor: AppColors.primary,
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: AppColors.secondary,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const Row(
-                                children: [
-                                  Icon(Icons.add_rounded,
-                                      size: 15,
-                                      color: AppColors.secondaryForeground),
-                                  SizedBox(width: 5),
-                                  Text(
-                                    'Add Page',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.secondaryForeground,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                  horizontal: 16, vertical: 8),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14)),
+                              textStyle: const TextStyle(
+                                  fontWeight: FontWeight.w800, fontSize: 13),
                             ),
                           ),
                         ],
                       ),
 
-                      const SizedBox(height: 10),
-
-                      // Page tabs
+                      const SizedBox(height: 16),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
                         child: Row(
                           children: List.generate(_pages.length, (i) {
                             final active = _activePage == i;
                             return GestureDetector(
-                              onTap: () => setState(() => _activePage = i),
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                setState(() {
+                                  _activePage = i;
+                                  _bindStoryTextToActivePage();
+                                });
+                              },
                               child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
-                                width: 46,
-                                height: 46,
-                                margin: const EdgeInsets.only(right: 10),
+                                duration: const Duration(milliseconds: 250),
+                                width: 54,
+                                height: 54,
+                                margin: const EdgeInsets.only(right: 12),
                                 decoration: BoxDecoration(
                                   color: _hexToColor(_pages[i].backgroundColor),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: active
-                                      ? Border.all(
-                                          color: Colors.white, width: 3)
-                                      : null,
-                                  boxShadow: active
-                                      ? [
-                                          BoxShadow(
-                                            color: Colors.black
-                                                .withValues(alpha: 0.2),
-                                            blurRadius: 6,
-                                          )
-                                        ]
-                                      : null,
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: active
+                                        ? AppColors.primary
+                                        : Colors.white.withOpacity(0.5),
+                                    width: active ? 3 : 1.5,
+                                  ),
+                                  boxShadow: [
+                                    if (active)
+                                      BoxShadow(
+                                        color:
+                                            AppColors.primary.withOpacity(0.2),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
+                                      )
+                                  ],
                                 ),
                                 child: Center(
                                   child: Text(
                                     '${i + 1}',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.foreground,
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w900,
+                                      color: active
+                                          ? AppColors.primary
+                                          : AppColors.foreground
+                                              .withOpacity(0.7),
                                     ),
                                   ),
                                 ),
@@ -668,11 +757,10 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                         ),
                       ),
 
-                      const SizedBox(height: 12),
-
-                      // Active page editor
+                      const SizedBox(height: 24),
                       if (currentPage != null)
                         _card(
+                          padding: const EdgeInsets.all(24),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -680,96 +768,53 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Row(
-                                    children: [
-                                      _label(
-                                          'PAGE ${_activePage + 1} OF ${_pages.length}'),
-                                      const SizedBox(width: 16),
-                                      GestureDetector(
-                                        onTap: _activePage > 0
-                                            ? _previousPage
-                                            : null,
-                                        child: Icon(
-                                          Icons.arrow_back_ios_rounded,
-                                          size: 14,
-                                          color: _activePage > 0
-                                              ? AppColors.foreground
-                                              : AppColors.mutedForeground
-                                                  .withValues(alpha: 0.4),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      GestureDetector(
-                                        onTap: _activePage < _pages.length - 1
-                                            ? _nextPage
-                                            : null,
-                                        child: Icon(
-                                          Icons.arrow_forward_ios_rounded,
-                                          size: 14,
-                                          color: _activePage < _pages.length - 1
-                                              ? AppColors.foreground
-                                              : AppColors.mutedForeground
-                                                  .withValues(alpha: 0.4),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                  _label(
+                                      'PAGE ${_activePage + 1} OF ${_pages.length}'),
                                   GestureDetector(
                                     onTap: _deletePage,
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 10, vertical: 4),
+                                      padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
                                         color: const Color(0xFFFFE5EA),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
-                                      child: const Row(
-                                        children: [
-                                          Icon(
-                                            Icons.delete_outline_rounded,
-                                            size: 14,
-                                            color: AppColors.destructive,
-                                          ),
-                                          SizedBox(width: 4),
-                                          Text(
-                                            'Delete',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: AppColors.destructive,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                      child: const Icon(
+                                          Icons.delete_outline_rounded,
+                                          size: 18,
+                                          color: AppColors.destructive),
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 20),
                               _label('STORY TEXT'),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 12),
+                              _suggestionsBar(),
+                              const SizedBox(height: 12),
                               _multilineField(
-                                currentPage.text,
                                 'What happens on this page?',
                                 (v) => _updateActivePage('text', v),
                               ),
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 24),
                               _label('PAGE IMAGE'),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 12),
                               GestureDetector(
                                 onTap: _pickImage,
                                 child: Container(
                                   width: double.infinity,
-                                  height: 140,
+                                  height: 180,
                                   decoration: BoxDecoration(
-                                    color: AppColors.input,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: AppColors.border),
+                                    color: AppColors.input.withOpacity(0.5),
+                                    borderRadius: BorderRadius.circular(24),
+                                    border: Border.all(
+                                        color:
+                                            AppColors.border.withOpacity(0.5),
+                                        width: 2),
                                   ),
                                   child: currentPage.imageDescription.isNotEmpty
                                       ? ClipRRect(
                                           borderRadius:
-                                              BorderRadius.circular(11),
+                                              BorderRadius.circular(22),
                                           child: Stack(
                                             fit: StackFit.expand,
                                             children: [
@@ -779,127 +824,148 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                                                 fit: BoxFit.cover,
                                                 errorBuilder: (ctx, err, stk) =>
                                                     const Center(
-                                                  child: Icon(
-                                                      Icons
-                                                          .broken_image_rounded,
-                                                      color: AppColors
-                                                          .mutedForeground,
-                                                      size: 40),
-                                                ),
+                                                        child: Icon(
+                                                            Icons
+                                                                .broken_image_rounded,
+                                                            color: AppColors
+                                                                .mutedForeground,
+                                                            size: 48)),
                                               ),
                                               Positioned(
-                                                bottom: 8,
-                                                right: 8,
+                                                top: 12,
+                                                right: 12,
                                                 child: GestureDetector(
                                                   onTap: () =>
                                                       _updateActivePage(
                                                           'image', ''),
-                                                  child: Container(
-                                                    padding:
-                                                        const EdgeInsets.all(6),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.black
-                                                          .withValues(
-                                                              alpha: 0.6),
-                                                      shape: BoxShape.circle,
+                                                  child: ClipRRect(
+                                                    child: BackdropFilter(
+                                                      filter: ImageFilter.blur(
+                                                          sigmaX: 10,
+                                                          sigmaY: 10),
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .all(8),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: Colors.black
+                                                              .withOpacity(0.4),
+                                                          shape:
+                                                              BoxShape.circle,
+                                                        ),
+                                                        child: const Icon(
+                                                            Icons.close_rounded,
+                                                            color: Colors.white,
+                                                            size: 18),
+                                                      ),
                                                     ),
-                                                    child: const Icon(
-                                                        Icons.delete_rounded,
-                                                        color: Colors.white,
-                                                        size: 16),
                                                   ),
                                                 ),
                                               ),
                                             ],
                                           ),
                                         )
-                                      : const Column(
+                                      : Column(
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
                                           children: [
-                                            Icon(
-                                                Icons
-                                                    .add_photo_alternate_rounded,
-                                                color:
-                                                    AppColors.mutedForeground,
-                                                size: 36),
-                                            SizedBox(height: 6),
-                                            Text(
-                                              'Tap to select image',
-                                              style: TextStyle(
-                                                color:
-                                                    AppColors.mutedForeground,
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w500,
+                                            Container(
+                                              padding: const EdgeInsets.all(16),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.primary
+                                                    .withOpacity(0.05),
+                                                shape: BoxShape.circle,
                                               ),
+                                              child: Icon(
+                                                  Icons
+                                                      .add_photo_alternate_rounded,
+                                                  color: AppColors.primary
+                                                      .withOpacity(0.5),
+                                                  size: 40),
+                                            ),
+                                            const SizedBox(height: 12),
+                                            const Text(
+                                              'Add an illustration',
+                                              style: TextStyle(
+                                                  color:
+                                                      AppColors.mutedForeground,
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w700),
                                             ),
                                           ],
                                         ),
                                 ),
                               ),
-                              const SizedBox(height: 10),
-                              _label('PAGE COLOUR'),
-                              const SizedBox(height: 6),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 6,
-                                children: _coverColors.map((c) {
-                                  final sel = currentPage.backgroundColor == c;
-                                  return GestureDetector(
-                                    onTap: () {
-                                      HapticFeedback.selectionClick();
-                                      _updateActivePage('color', c);
-                                    },
-                                    child: AnimatedContainer(
-                                      duration:
-                                          const Duration(milliseconds: 150),
-                                      width: 30,
-                                      height: 30,
-                                      decoration: BoxDecoration(
-                                        color: _hexToColor(c),
-                                        borderRadius: BorderRadius.circular(15),
-                                        border: sel
-                                            ? Border.all(
-                                                color: Colors.white, width: 3)
-                                            : null,
-                                        boxShadow: sel
-                                            ? [
-                                                BoxShadow(
-                                                  color: Colors.black
-                                                      .withValues(alpha: 0.2),
-                                                  blurRadius: 4,
-                                                )
-                                              ]
-                                            : null,
+                              const SizedBox(height: 24),
+                              _label('PAGE BACKGROUND'),
+                              const SizedBox(height: 12),
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                physics: const BouncingScrollPhysics(),
+                                child: Row(
+                                  children: _coverColors.map((c) {
+                                    final sel =
+                                        currentPage.backgroundColor == c;
+                                    return GestureDetector(
+                                      onTap: () {
+                                        HapticFeedback.selectionClick();
+                                        _updateActivePage('color', c);
+                                      },
+                                      child: AnimatedContainer(
+                                        duration:
+                                            const Duration(milliseconds: 200),
+                                        width: 36,
+                                        height: 36,
+                                        margin:
+                                            const EdgeInsets.only(right: 10),
+                                        decoration: BoxDecoration(
+                                          color: _hexToColor(c),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: sel
+                                                ? Colors.white
+                                                : Colors.transparent,
+                                            width: 2.5,
+                                          ),
+                                          boxShadow: [
+                                            if (sel)
+                                              BoxShadow(
+                                                color: Colors.black
+                                                    .withOpacity(0.1),
+                                                blurRadius: 6,
+                                                offset: const Offset(0, 3),
+                                              )
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                }).toList(),
+                                    );
+                                  }).toList(),
+                                ),
                               ),
                             ],
                           ),
-                        ),
+                        ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.05),
 
-                      const SizedBox(height: 20),
-
-                      // Bottom action row
+                      const SizedBox(height: 40),
                       Row(
                         children: [
                           Expanded(
                             child: KidButton(
-                              label: 'Preview Story',
+                              label: 'Preview',
                               icon: Icons.play_arrow_rounded,
                               variant: KidButtonVariant.secondary,
                               onPressed: _openPreview,
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 16),
                           Expanded(
                             child: KidButton(
                               label: _saveStatus == _SaveStatus.saving
                                   ? 'Saving...'
-                                  : 'Save',
-                              icon: Icons.save_rounded,
+                                  : 'Save Story',
+                              icon: Icons.check_rounded,
                               onPressed: _saveStatus == _SaveStatus.saving
                                   ? () {}
                                   : () => _save(),
@@ -908,8 +974,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                           ),
                         ],
                       ),
-
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 40),
                     ],
                   ),
                 ),
@@ -921,50 +986,63 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
     );
   }
 
-  Widget _iconBtn(
-    IconData icon,
-    Color bg,
-    Color fg,
-    VoidCallback? onTap, {
-    String? tooltip,
-  }) {
-    final btn = GestureDetector(
+  Widget _buildCoverEmoji(String coverEmoji, {double size = 42}) {
+    if (coverEmoji.startsWith('http')) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(30),
+        child: Image.network(coverEmoji,
+            fit: BoxFit.cover, width: size * 1.8, height: size * 1.8),
+      );
+    } else if (coverEmoji.startsWith('/') ||
+        coverEmoji.contains(':\\') ||
+        coverEmoji.startsWith('file://')) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(30),
+        child: Image.file(File(coverEmoji.replaceFirst('file://', '')),
+            fit: BoxFit.cover, width: size * 1.8, height: size * 1.8),
+      );
+    } else {
+      return Text(coverEmoji, style: TextStyle(fontSize: size));
+    }
+  }
+
+  Widget _iconBtn(IconData icon, Color bg, Color fg, VoidCallback? onTap) {
+    return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 40,
-        height: 40,
+        width: 46,
+        height: 46,
         decoration: BoxDecoration(
           color: bg,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: bg.withValues(alpha: 0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: Icon(icon, color: fg, size: 20),
+        child: Icon(icon, color: fg, size: 22),
       ),
     );
-    if (tooltip != null) return Tooltip(message: tooltip, child: btn);
-    return btn;
   }
 
-  Widget _card({required Widget child}) {
+  Widget _card({required Widget child, EdgeInsetsGeometry? padding}) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: padding ?? const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(20),
+        color: Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(32),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
+        border: Border.all(color: Colors.white, width: 1.5),
       ),
       child: child,
     );
@@ -974,48 +1052,83 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
     return Text(
       text,
       style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
+        fontSize: 12,
+        fontWeight: FontWeight.w900,
         color: AppColors.mutedForeground,
-        letterSpacing: 0.9,
+        letterSpacing: 1.2,
       ),
     );
   }
 
-  Widget _multilineField(
-    String value,
-    String hint,
-    ValueChanged<String> onChanged, {
-    int maxLines = 4,
-  }) {
+  Widget _multilineField(String hint, ValueChanged<String> onChanged) {
     return TextFormField(
-      initialValue: value,
+      controller: _storyTextController,
+      focusNode: _storyTextFocusNode,
       onChanged: onChanged,
-      maxLines: maxLines,
+      maxLines: 5,
       style: const TextStyle(
-        fontSize: 15,
-        color: AppColors.foreground,
-        height: 1.5,
-      ),
+          fontSize: 16,
+          color: AppColors.foreground,
+          height: 1.5,
+          fontWeight: FontWeight.w600),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle:
-            const TextStyle(color: AppColors.mutedForeground, fontSize: 14),
+        hintStyle: TextStyle(
+            color: AppColors.mutedForeground.withOpacity(0.5),
+            fontSize: 15,
+            fontWeight: FontWeight.w500),
         filled: true,
-        fillColor: AppColors.input,
+        fillColor: AppColors.input.withOpacity(0.3),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.border, width: 1.5),
+          borderRadius: BorderRadius.circular(20),
+          borderSide:
+              BorderSide(color: AppColors.border.withOpacity(0.3), width: 1.5),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.border, width: 1.5),
+          borderRadius: BorderRadius.circular(20),
+          borderSide:
+              BorderSide(color: AppColors.border.withOpacity(0.3), width: 1.5),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.8),
+          borderRadius: BorderRadius.circular(20),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
-        contentPadding: const EdgeInsets.all(12),
+        contentPadding: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  Widget _suggestionsBar() {
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: _storySuggestions.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final suggestion = _storySuggestions[index];
+          return ActionChip(
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              _insertSuggestion(suggestion);
+            },
+            label: Text(
+              suggestion,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.foreground.withOpacity(0.85),
+              ),
+            ),
+            backgroundColor: Colors.white.withOpacity(0.85),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: AppColors.border.withOpacity(0.45)),
+            ),
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          );
+        },
       ),
     );
   }

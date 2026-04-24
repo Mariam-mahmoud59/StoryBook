@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/stories_provider.dart';
+import '../services/sync_engine_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/gradient_background.dart';
 
@@ -14,15 +15,12 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _soundEnabled = true;
-  bool _animationsEnabled = true;
+  bool _isSyncingNow = false;
 
   Widget _settingRow({
     required IconData icon,
     required String title,
     String? subtitle,
-    bool? value,
-    ValueChanged<bool>? onToggle,
     VoidCallback? onTap,
     Color? iconColor,
   }) {
@@ -67,19 +65,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            if (onToggle != null)
-              Switch(
-                value: value!,
-                onChanged: (v) {
-                  HapticFeedback.selectionClick();
-                  onToggle(v);
-                },
-                activeTrackColor: AppColors.primary,
-              )
-            else if (onTap != null)
+            if (onTap != null)
               const Icon(Icons.chevron_right_rounded,
                   color: AppColors.mutedForeground),
           ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _syncNow() async {
+    setState(() => _isSyncingNow = true);
+    final result = await context.read<SyncEngineService>().syncPendingActions();
+    if (!mounted) return;
+    setState(() => _isSyncingNow = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Sync complete: ${result.synced} synced, ${result.failed} failed',
         ),
       ),
     );
@@ -142,85 +146,91 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   children: [
                     // Profile card
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: AppColors.card,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          )
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 60,
-                            height: 60,
-                            decoration: BoxDecoration(
-                              color: AppColors.muted,
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                            child: const Center(
-                              child: Text('📚', style: TextStyle(fontSize: 30)),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                userName,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.foreground,
-                                ),
-                              ),
-                              if (userEmail.isNotEmpty)
-                                Text(
-                                  userEmail,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.mutedForeground,
-                                  ),
-                                ),
-                              Text(
-                                '${stories.length} ${stories.length == 1 ? "story" : "stories"} created',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.mutedForeground,
-                                ),
-                              ),
+                    GestureDetector(
+                        onTap: () => Navigator.pushNamed(context, '/profile'),
+                        child: Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: AppColors.card,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.05),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              )
                             ],
                           ),
-                        ],
-                      ),
-                    ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 60,
+                                height: 60,
+                                decoration: BoxDecoration(
+                                  color: AppColors.muted,
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                                child: const Center(
+                                  child: Text('📚',
+                                      style: TextStyle(fontSize: 30)),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      userName,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.foreground,
+                                      ),
+                                    ),
+                                    if (userEmail.isNotEmpty)
+                                      Text(
+                                        userEmail,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.mutedForeground,
+                                        ),
+                                      ),
+                                    Text(
+                                      '${stories.length} ${stories.length == 1 ? "story" : "stories"} created',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: AppColors.mutedForeground,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.chevron_right_rounded,
+                                  color: AppColors.mutedForeground),
+                            ],
+                          ),
+                        )),
 
                     const SizedBox(height: 16),
-                    const _SectionLabel(text: 'App Settings'),
+                    const _SectionLabel(text: 'Quick Actions'),
                     const SizedBox(height: 8),
 
                     _settingsGroup([
                       _settingRow(
-                        icon: Icons.volume_up_rounded,
-                        title: 'Sound Effects',
-                        subtitle: 'Enable sounds when tapping',
-                        value: _soundEnabled,
-                        onToggle: (v) => setState(() => _soundEnabled = v),
+                        icon: Icons.auto_fix_high_rounded,
+                        title: 'Create Story',
+                        subtitle: 'Start a brand new adventure',
+                        onTap: () =>
+                            Navigator.pushNamed(context, '/editor/new'),
                       ),
                       const Divider(
                           height: 1, color: AppColors.border, indent: 64),
                       _settingRow(
-                        icon: Icons.bolt_rounded,
-                        title: 'Animations',
-                        subtitle: 'Enable animated transitions',
-                        value: _animationsEnabled,
-                        onToggle: (v) => setState(() => _animationsEnabled = v),
+                        icon: Icons.person_rounded,
+                        title: 'Manage Profile',
+                        subtitle: 'Edit your name and avatar',
+                        onTap: () => Navigator.pushNamed(context, '/profile'),
                       ),
                     ]),
 
@@ -247,6 +257,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           arguments: {'filter': 'favorites'},
                         ),
                         iconColor: AppColors.warning,
+                      ),
+                    ]),
+
+                    const SizedBox(height: 16),
+                    const _SectionLabel(text: 'Sync'),
+                    const SizedBox(height: 8),
+
+                    _settingsGroup([
+                      FutureBuilder<int>(
+                        future:
+                            context.read<SyncEngineService>().getPendingCount(),
+                        builder: (context, snapshot) {
+                          final pending = snapshot.data ?? 0;
+                          return _settingRow(
+                            icon: Icons.sync_rounded,
+                            title: _isSyncingNow ? 'Syncing...' : 'Sync Now',
+                            subtitle: pending == 0
+                                ? 'Everything is up to date'
+                                : '$pending pending change${pending == 1 ? '' : 's'}',
+                            onTap: _isSyncingNow ? null : _syncNow,
+                            iconColor: AppColors.secondaryForeground,
+                          );
+                        },
                       ),
                     ]),
 
@@ -292,6 +325,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 onPressed: () {
                                   Navigator.pop(context);
                                   HapticFeedback.heavyImpact();
+                                  context
+                                      .read<StoriesProvider>()
+                                      .clearAllStories();
                                 },
                                 style: TextButton.styleFrom(
                                     foregroundColor: AppColors.destructive),

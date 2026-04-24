@@ -393,6 +393,52 @@ class AuthProvider extends ChangeNotifier {
   /// Signs out the current user and clears ALL sessions (local + remote).
   ///
   /// Uses global scope to ensure OAuth sessions are also revoked.
+
+  /// Updates profile metadata (e.g. display name and avatar URL).
+  ///
+  /// Returns `true` on success. On failure, [errorMessage] is populated.
+  Future<bool> updateProfile({
+    required String name,
+    String? avatarUrl,
+  }) async {
+    final nameError = validateName(name);
+    if (nameError != null) {
+      _errorMessage = nameError;
+      notifyListeners();
+      return false;
+    }
+
+    _setLoading(true);
+    _clearError();
+
+    try {
+      final payload = <String, dynamic>{'name': name.trim()};
+      if (avatarUrl != null) {
+        payload['avatar_url'] = avatarUrl.trim();
+      }
+
+      final response = await _authRepository.updateProfile(payload);
+      _user = response.user ?? _user;
+      if (_user == null) {
+        _status = AuthStatus.unauthenticated;
+      } else {
+        _status = _isEmailVerified(_user!)
+            ? AuthStatus.authenticated
+            : AuthStatus.pendingVerification;
+      }
+      _setLoading(false);
+      return true;
+    } on AuthServiceException catch (e) {
+      _errorMessage = e.message;
+      _setLoading(false);
+      return false;
+    } catch (e) {
+      _errorMessage = 'Could not update profile. Please try again.';
+      _setLoading(false);
+      return false;
+    }
+  }
+
   Future<void> signOut() async {
     _setLoading(true);
 

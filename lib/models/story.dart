@@ -1,3 +1,4 @@
+import 'package:uuid/uuid.dart';
 
 class StoryPage {
   final String id;
@@ -107,10 +108,13 @@ class Story {
 }
 
 List<Story> sampleStories() {
+  const uuid = Uuid();
   final now = DateTime.now();
+  final sample1Id = uuid.v4();
+  final sample2Id = uuid.v4();
   return [
     Story(
-      id: 'sample_1',
+      id: sample1Id,
       title: 'The Dragon and the Moon',
       coverColor: '#FFD6E8',
       coverEmoji: '🐉',
@@ -119,7 +123,7 @@ List<Story> sampleStories() {
       updatedAt: now.subtract(const Duration(hours: 1)),
       pages: [
         StoryPage(
-          id: 'p1',
+          id: uuid.v4(),
           text:
               'Once upon a time, a tiny dragon named Ember loved to look at the moon every night.',
           imageDescription:
@@ -127,23 +131,22 @@ List<Story> sampleStories() {
           backgroundColor: '#FFD6E8',
         ),
         StoryPage(
-          id: 'p2',
+          id: uuid.v4(),
           text: 'One night, the moon asked Ember to come play in the sky!',
           imageDescription: 'A dragon flying up toward a smiling moon',
           backgroundColor: '#C0E5FF',
         ),
         StoryPage(
-          id: 'p3',
+          id: uuid.v4(),
           text:
               'Together they danced among the stars and became the best of friends.',
-          imageDescription:
-              'A dragon and moon dancing with stars around them',
+          imageDescription: 'A dragon and moon dancing with stars around them',
           backgroundColor: '#C2F5E9',
         ),
       ],
     ),
     Story(
-      id: 'sample_2',
+      id: sample2Id,
       title: 'Bunny in Space',
       coverColor: '#C0E5FF',
       coverEmoji: '🐰',
@@ -152,14 +155,14 @@ List<Story> sampleStories() {
       updatedAt: now.subtract(const Duration(days: 1)),
       pages: [
         StoryPage(
-          id: 'p1',
+          id: uuid.v4(),
           text: 'Bella the Bunny always dreamed of visiting the stars.',
           imageDescription:
               'A bunny wearing an astronaut suit looking at the stars',
           backgroundColor: '#E5DEFF',
         ),
         StoryPage(
-          id: 'p2',
+          id: uuid.v4(),
           text: 'She built a rocket from carrots and launched into space!',
           imageDescription: 'A bunny in a carrot rocket ship blasting off',
           backgroundColor: '#C0E5FF',

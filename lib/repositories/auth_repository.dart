@@ -44,6 +44,11 @@ class AuthRepository {
     return _authService.signInWithGoogle();
   }
 
+  /// Updates current user metadata.
+  Future<UserResponse> updateProfile(Map<String, dynamic> data) {
+    return _authService.updateProfile(data);
+  }
+
   /// Clears ALL user sessions (local + remote, including OAuth).
   Future<void> signOut() {
     return _authService.signOut();

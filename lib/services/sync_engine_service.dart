@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../database/app_database.dart';
 import '../services/storage_service.dart';
+
 /// The core offline-to-online synchronization engine.
 ///
 /// Responsible for draining the local [SyncQueues] table and pushing
@@ -64,15 +65,19 @@ class SyncEngineService {
     }
 
     _isSyncing = true;
-    
+
     try {
       int successCount = 0;
       int failedCount = 0;
 
       // 1 — Fetch all records awaiting sync, ordered by creation time (FIFO).
       final pendingRecords = await (_db.select(_db.syncQueues)
-            ..where((row) => row.status.equals('pending') | row.status.equals('failed'))
-            ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
+            ..where((row) =>
+                row.status.equals('pending') | row.status.equals('failed'))
+            ..orderBy([
+              (row) => OrderingTerm.asc(row.createdAt),
+              (row) => OrderingTerm.asc(row.id),
+            ]))
           .get();
 
       if (pendingRecords.isEmpty) {
@@ -90,14 +95,18 @@ class SyncEngineService {
 
       // 2 — Process each record individually.
       for (final record in pendingRecords) {
-        final Map<String, dynamic> data = jsonDecode(record.payload) as Map<String, dynamic>;
-        final storyId = data['story_id'] as String? ?? data['id'] as String?;
+        String? storyId;
 
         try {
+          final Map<String, dynamic> data =
+              jsonDecode(record.payload) as Map<String, dynamic>;
+          storyId = _extractStoryId(record.actionType, data);
           // 2a — Backoff Strategy
           if (record.lastAttemptAt != null && record.retryCount > 0) {
-            final int backoffSeconds = 2 * (1 << (record.retryCount - 1)); // 2, 4, 8, 16...
-            final nextAttempt = record.lastAttemptAt!.add(Duration(seconds: backoffSeconds));
+            final int backoffSeconds =
+                2 * (1 << (record.retryCount - 1)); // 2, 4, 8, 16...
+            final nextAttempt =
+                record.lastAttemptAt!.add(Duration(seconds: backoffSeconds));
             if (DateTime.now().isBefore(nextAttempt)) {
               continue; // Skip due to backoff delay
             }
@@ -105,17 +114,21 @@ class SyncEngineService {
 
           // 2b — Check Dependency constraints
           if (storyId != null && blockedDependencies.contains(storyId)) {
-            log('Skipping [${record.actionType}] id=${record.id} due to dependency blockage.', name: 'SyncEngine');
+            log('Skipping [${record.actionType}] id=${record.id} due to dependency blockage.',
+                name: 'SyncEngine');
             continue;
           }
 
           // 2c — Mark as 'processing' so it isn't picked up by a concurrent run.
           await _updateStatus(record.id, 'processing');
 
-          // 2d — Route to the correct Supabase operation.
+          // 2d — Validate UUID payloads before any network call.
+          _validateUuidPayload(record.actionType, data);
+
+          // 2e — Route to the correct Supabase operation.
           await _dispatch(record.actionType, data);
 
-          // 2e — Success → remove from queue.
+          // 2f — Success → remove from queue.
           await (_db.delete(_db.syncQueues)
                 ..where((row) => row.id.equals(record.id)))
               .go();
@@ -126,9 +139,28 @@ class SyncEngineService {
             'Synced [${record.actionType}] id=${record.id}',
             name: 'SyncEngine',
           );
+        } on InvalidQueuePayloadException catch (e) {
+          failedCount++;
+          await _markAsFailed(
+            record.id,
+            5,
+            e.message,
+            incrementRetry: false,
+          );
+          log(
+            'Invalid queue payload [${record.actionType}] id=${record.id}: ${e.message}',
+            name: 'SyncEngine',
+            level: 900,
+          );
+
+          if (storyId != null) {
+            blockedDependencies.add(storyId);
+          }
         } on AuthException catch (e) {
           log('Auth error blocking sync: $e', name: 'SyncEngine');
-          await _markAsFailed(record.id, record.retryCount, 'AuthException: ${e.message}', incrementRetry: false);
+          await _markAsFailed(
+              record.id, record.retryCount, 'AuthException: ${e.message}',
+              incrementRetry: false);
           break; // Stop Sync loop
         } catch (e) {
           failedCount++;
@@ -140,12 +172,16 @@ class SyncEngineService {
             errorMsg = 'NetworkError: $e';
           }
 
-          final isPermanent = await _markAsFailed(record.id, record.retryCount, errorMsg, incrementRetry: true);
-          
+          final isPermanent = await _markAsFailed(
+              record.id, record.retryCount, errorMsg,
+              incrementRetry: true);
+
           if (isPermanent) {
-            log('Permanently failed [${record.actionType}] id=${record.id}: $errorMsg', name: 'SyncEngine', level: 900);
+            log('Permanently failed [${record.actionType}] id=${record.id}: $errorMsg',
+                name: 'SyncEngine', level: 900);
           } else {
-            log('Failed to sync [${record.actionType}] id=${record.id}: $errorMsg. Will retry.', name: 'SyncEngine', level: 800);
+            log('Failed to sync [${record.actionType}] id=${record.id}: $errorMsg. Will retry.',
+                name: 'SyncEngine', level: 800);
           }
 
           if (storyId != null) {
@@ -184,8 +220,7 @@ class SyncEngineService {
     final bool isPermanent = nextCount >= 5;
     final String status = isPermanent ? 'permanently_failed' : 'failed';
 
-    await (_db.update(_db.syncQueues)
-          ..where((row) => row.id.equals(recordId)))
+    await (_db.update(_db.syncQueues)..where((row) => row.id.equals(recordId)))
         .write(
       SyncQueuesCompanion(
         status: Value(status),
@@ -207,8 +242,7 @@ class SyncEngineService {
   Future<int> getPendingCount() async {
     final query = _db.select(_db.syncQueues)
       ..where(
-        (row) =>
-            row.status.equals('pending') | row.status.equals('failed'),
+        (row) => row.status.equals('pending') | row.status.equals('failed'),
       );
     final results = await query.get();
     return results.length;
@@ -228,7 +262,9 @@ class SyncEngineService {
           final sid = data['story_id'] ?? data['id'];
           if (sid == storyId) {
             if (q.status == 'processing') isSyncing = true;
-            if (q.status == 'failed' || q.status == 'permanently_failed') hasFailed = true;
+            if (q.status == 'failed' || q.status == 'permanently_failed') {
+              hasFailed = true;
+            }
             if (q.status == 'pending') isPending = true;
           }
         } catch (_) {}
@@ -239,6 +275,66 @@ class SyncEngineService {
       if (isPending) return 'pending';
       return 'synced';
     });
+  }
+
+  String? _extractStoryId(String actionType, Map<String, dynamic> data) {
+    switch (actionType) {
+      case 'CREATE_STORY_PAGE':
+      case 'UPDATE_STORY_PAGE':
+      case 'TOGGLE_FAVORITE':
+        return data['story_id'] as String?;
+      case 'CREATE_STORY':
+      case 'UPDATE_STORY':
+      case 'DELETE_STORY':
+        return data['id'] as String?;
+      default:
+        return data['story_id'] as String? ?? data['id'] as String?;
+    }
+  }
+
+  void _validateUuidPayload(String actionType, Map<String, dynamic> data) {
+    switch (actionType) {
+      case 'CREATE_STORY':
+      case 'UPDATE_STORY':
+      case 'DELETE_STORY':
+        _requireUuidField(data, 'id', actionType);
+        break;
+      case 'CREATE_STORY_PAGE':
+      case 'UPDATE_STORY_PAGE':
+      case 'DELETE_STORY_PAGE':
+        _requireUuidField(data, 'id', actionType);
+        _requireUuidField(data, 'story_id', actionType);
+        break;
+      case 'TOGGLE_FAVORITE':
+        _requireUuidField(data, 'story_id', actionType);
+        _requireUuidField(data, 'user_id', actionType);
+        break;
+      case 'UPDATE_PROFILE':
+        _requireUuidField(data, 'id', actionType);
+        break;
+      default:
+        break;
+    }
+  }
+
+  void _requireUuidField(
+    Map<String, dynamic> data,
+    String field,
+    String actionType,
+  ) {
+    final value = data[field];
+    if (value is! String || !_isValidUuid(value)) {
+      throw InvalidQueuePayloadException(
+        'Invalid UUID for "$field" in action "$actionType": $value',
+      );
+    }
+  }
+
+  bool _isValidUuid(String value) {
+    final uuidRegex = RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+    );
+    return uuidRegex.hasMatch(value);
   }
 
   // -------------------------------------------------------------------------
@@ -257,33 +353,39 @@ class SyncEngineService {
       case 'UPDATE_STORY':
         if (data.containsKey('coverEmoji') && data['coverEmoji'] != null) {
           final String curVal = data['coverEmoji'];
-          if (curVal.startsWith('/') || curVal.startsWith('file://') || curVal.contains(':\\')) {
+          if (curVal.startsWith('/') ||
+              curVal.startsWith('file://') ||
+              curVal.contains(':\\')) {
             final file = File(curVal.replaceFirst('file://', ''));
             if (file.existsSync()) {
               final storage = SupabaseStorageService();
               final userId = _supabase.auth.currentUser?.id ?? '';
               final storyId = data['id'] as String? ?? 'unknown';
-              
-              log('Uploading local cover image file to Supabase: ${file.path}', name: 'SyncEngine');
+
+              log('Uploading local cover image file to Supabase: ${file.path}',
+                  name: 'SyncEngine');
               final remoteUrl = await storage.uploadStoryCover(
                 userId: userId,
                 storyId: storyId,
                 imageFile: file,
               );
               data['coverEmoji'] = remoteUrl;
-              
+
               try {
-                await (_db.update(_db.storiesTable)..where((t) => t.id.equals(storyId)))
+                await (_db.update(_db.storiesTable)
+                      ..where((t) => t.id.equals(storyId)))
                     .write(StoriesTableCompanion(coverEmoji: Value(remoteUrl)));
               } catch (e) {
-                log('Failed to update local sqlite with remoteUrl: $e', name: 'SyncEngine');
+                log('Failed to update local sqlite with remoteUrl: $e',
+                    name: 'SyncEngine');
               }
             } else {
-              throw SyncEngineException('Local cover image file not found before sync: $curVal');
+              throw SyncEngineException(
+                  'Local cover image file not found before sync: $curVal');
             }
           }
         }
-        
+
         final row = _toStoryRow(data);
         if (actionType == 'CREATE_STORY') {
           await _supabase.from('stories').upsert(row);
@@ -301,35 +403,44 @@ class SyncEngineService {
       // ── Story Pages ─────────────────────────────────────────────────
       case 'CREATE_STORY_PAGE':
       case 'UPDATE_STORY_PAGE':
-        if (data.containsKey('imageDescription') && data['imageDescription'] != null) {
+        if (data.containsKey('imageDescription') &&
+            data['imageDescription'] != null) {
           final String imgDesc = data['imageDescription'];
           // Check if it's a local file path
-          if (imgDesc.startsWith('/') || imgDesc.startsWith('file://') || imgDesc.contains(':\\')) {
+          if (imgDesc.startsWith('/') ||
+              imgDesc.startsWith('file://') ||
+              imgDesc.contains(':\\')) {
             final file = File(imgDesc.replaceFirst('file://', ''));
             if (file.existsSync()) {
               final storage = SupabaseStorageService();
               final userId = _supabase.auth.currentUser?.id ?? '';
               final storyId = data['story_id'] as String? ?? 'unknown';
               final pageId = data['id'] as String? ?? 'unknown';
-              
-              log('Uploading local image file to Supabase: ${file.path}', name: 'SyncEngine');
+
+              log('Uploading local image file to Supabase: ${file.path}',
+                  name: 'SyncEngine');
               final remoteUrl = await storage.uploadStoryPageImage(
                 userId: userId,
                 storyId: storyId,
                 pageId: pageId,
                 imageFile: file,
               );
-              data['imageDescription'] = remoteUrl; // Replace local path with remote URL
-              
+              data['imageDescription'] =
+                  remoteUrl; // Replace local path with remote URL
+
               // Update local database to maintain parity
               try {
-                await (_db.update(_db.storyPagesTable)..where((t) => t.id.equals(pageId)))
-                    .write(StoryPagesTableCompanion(imageDescription: Value(remoteUrl)));
+                await (_db.update(_db.storyPagesTable)
+                      ..where((t) => t.id.equals(pageId)))
+                    .write(StoryPagesTableCompanion(
+                        imageDescription: Value(remoteUrl)));
               } catch (e) {
-                log('Failed to update local sqlite with remoteUrl: $e', name: 'SyncEngine');
+                log('Failed to update local sqlite with remoteUrl: $e',
+                    name: 'SyncEngine');
               }
             } else {
-              throw const SyncEngineException('Local image file not found. Cannot sync page image.');
+              throw const SyncEngineException(
+                  'Local image file not found. Cannot sync page image.');
             }
           }
         }
@@ -423,8 +534,7 @@ class SyncEngineService {
         'background_color': data['backgroundColor'],
       // Pass through any keys already in snake_case.
       if (data.containsKey('story_id')) 'story_id': data['story_id'],
-      if (data.containsKey('page_number'))
-        'page_number': data['page_number'],
+      if (data.containsKey('page_number')) 'page_number': data['page_number'],
       if (data.containsKey('image_url')) 'image_url': data['image_url'],
     };
   }
@@ -435,8 +545,7 @@ class SyncEngineService {
 
   /// Updates the [status] column of a sync queue record by its [id].
   Future<void> _updateStatus(int id, String status) async {
-    await (_db.update(_db.syncQueues)
-          ..where((row) => row.id.equals(id)))
+    await (_db.update(_db.syncQueues)..where((row) => row.id.equals(id)))
         .write(SyncQueuesCompanion(status: Value(status)));
   }
 }
@@ -476,4 +585,8 @@ class SyncEngineException implements Exception {
 
   @override
   String toString() => 'SyncEngineException: $message';
+}
+
+class InvalidQueuePayloadException extends SyncEngineException {
+  const InvalidQueuePayloadException(super.message);
 }
