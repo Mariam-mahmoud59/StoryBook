@@ -16,6 +16,8 @@ import 'screens/story_preview_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/verify_email_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/onboarding_screen.dart';
+import 'screens/welcome_screen.dart';
 
 class StorybookApp extends StatefulWidget {
   const StorybookApp({super.key});
@@ -99,6 +101,8 @@ class _StorybookAppState extends State<StorybookApp> {
       initialRoute: '/splash',
       routes: {
         '/splash': (context) => const SplashScreen(),
+        '/onboarding': (context) => const OnboardingScreen(),
+        '/welcome': (context) => const WelcomeScreen(),
         '/sign-in': (context) => const SignInScreen(),
         '/sign-up': (context) => const SignUpScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),

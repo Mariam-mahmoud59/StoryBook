@@ -8,7 +8,6 @@ import '../providers/stories_provider.dart';
 import '../services/sync_engine_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/gradient_background.dart';
-import '../widgets/story_card.dart';
 
 class MyStoriesScreen extends StatefulWidget {
   const MyStoriesScreen({super.key});
@@ -17,7 +16,8 @@ class MyStoriesScreen extends StatefulWidget {
   State<MyStoriesScreen> createState() => _MyStoriesScreenState();
 }
 
-class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingObserver {
+class _MyStoriesScreenState extends State<MyStoriesScreen>
+    with WidgetsBindingObserver {
   String _search = '';
   bool _showFavoritesOnly = false;
   bool _isGridView = false;
@@ -66,8 +66,7 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Delete Story'),
         content: const Text("Are you sure? This can't be undone."),
         actions: [
@@ -81,8 +80,7 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
               HapticFeedback.mediumImpact();
               context.read<StoriesProvider>().deleteStory(id);
             },
-            style: TextButton.styleFrom(
-                foregroundColor: AppColors.destructive),
+            style: TextButton.styleFrom(foregroundColor: AppColors.destructive),
             child: const Text('Delete'),
           ),
         ],
@@ -98,9 +96,13 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
 
   Widget _buildCoverImage(String coverVal) {
     if (coverVal.startsWith('http')) {
-      return Image.network(coverVal, fit: BoxFit.cover, width: double.infinity, height: double.infinity);
-    } else if (coverVal.startsWith('/') || coverVal.contains(':\\') || coverVal.startsWith('file://')) {
-      return Image.file(File(coverVal.replaceFirst('file://', '')), fit: BoxFit.cover, width: double.infinity, height: double.infinity);
+      return Image.network(coverVal,
+          fit: BoxFit.cover, width: double.infinity, height: double.infinity);
+    } else if (coverVal.startsWith('/') ||
+        coverVal.contains(':\\') ||
+        coverVal.startsWith('file://')) {
+      return Image.file(File(coverVal.replaceFirst('file://', '')),
+          fit: BoxFit.cover, width: double.infinity, height: double.infinity);
     }
     return Center(child: Text(coverVal, style: const TextStyle(fontSize: 50)));
   }
@@ -115,7 +117,7 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
         final status = snapshot.data ?? 'synced';
         Color color;
         IconData icon;
-        
+
         switch (status) {
           case 'synced':
             color = Colors.green;
@@ -255,8 +257,8 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
                             )
                           ],
                         ),
-                        child: const Icon(Icons.add_rounded,
-                            color: Colors.white),
+                        child:
+                            const Icon(Icons.add_rounded, color: Colors.white),
                       ),
                     ),
                   ],
@@ -299,8 +301,7 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
                                 setState(() => _search = '');
                               },
                               child: const Icon(Icons.clear_rounded,
-                                  color: AppColors.mutedForeground,
-                                  size: 16),
+                                  color: AppColors.mutedForeground, size: 16),
                             )
                           : null,
                     ),
@@ -317,8 +318,8 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
                   children: [
                     _filterChip('All', !_showFavoritesOnly, null),
                     const SizedBox(width: 8),
-                    _filterChip('Favourites', _showFavoritesOnly,
-                        Icons.star_rounded),
+                    _filterChip(
+                        'Favourites', _showFavoritesOnly, Icons.star_rounded),
                     const Spacer(),
                     Text(
                       '${filtered.length} ${filtered.length == 1 ? "story" : "stories"}',
@@ -337,7 +338,9 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
               // Content
               Expanded(
                 child: context.watch<StoriesProvider>().isLoading
-                    ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                    ? const Center(
+                        child:
+                            CircularProgressIndicator(color: AppColors.primary))
                     : filtered.isEmpty
                         ? _emptyState()
                         : _isGridView
@@ -358,7 +361,7 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
       itemBuilder: (context, i) {
         final story = stories[i];
         final bgColor = _hexToColor(story.coverColor);
-        
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -369,7 +372,8 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
             Card(
               elevation: 4,
               shadowColor: Colors.black.withOpacity(0.06),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20)),
               color: AppColors.card,
               margin: const EdgeInsets.only(bottom: 16),
               child: ListTile(
@@ -377,18 +381,22 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
                 leading: CircleAvatar(
                   backgroundColor: bgColor.withOpacity(0.5),
                   radius: 30,
-                  child: Text(story.coverEmoji, style: const TextStyle(fontSize: 24)),
+                  child: Text(story.coverEmoji,
+                      style: const TextStyle(fontSize: 24)),
                 ),
                 title: Text(
                   story.title,
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.foreground),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, color: AppColors.foreground),
                 ),
                 subtitle: Text(
                   '${story.pages.length} pages',
                   style: const TextStyle(color: AppColors.mutedForeground),
                 ),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: AppColors.mutedForeground),
-                onTap: () => Navigator.pushNamed(context, '/editor/${story.id}'),
+                trailing: const Icon(Icons.arrow_forward_ios,
+                    size: 16, color: AppColors.mutedForeground),
+                onTap: () =>
+                    Navigator.pushNamed(context, '/editor/${story.id}'),
               ),
             ),
           ],
@@ -411,8 +419,7 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
         final story = stories[i];
         final bgColor = _hexToColor(story.coverColor);
         return GestureDetector(
-          onTap: () =>
-              Navigator.pushNamed(context, '/viewer/${story.id}'),
+          onTap: () => Navigator.pushNamed(context, '/viewer/${story.id}'),
           child: Container(
             decoration: BoxDecoration(
               color: AppColors.card,
@@ -494,8 +501,8 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
                                 onTap: () => Navigator.pushNamed(
                                     context, '/editor/${story.id}'),
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 5),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 5),
                                   decoration: BoxDecoration(
                                     color: AppColors.secondary,
                                     borderRadius: BorderRadius.circular(12),
@@ -515,8 +522,7 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
                             ),
                             const SizedBox(width: 6),
                             GestureDetector(
-                              onTap: () =>
-                                  _confirmDelete(context, story.id),
+                              onTap: () => _confirmDelete(context, story.id),
                               child: Container(
                                 width: 28,
                                 height: 28,
@@ -585,8 +591,7 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
       onTap: () => setState(() => _showFavoritesOnly = label != 'All'),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
           color: active ? AppColors.primary : AppColors.card,
           borderRadius: BorderRadius.circular(20),
@@ -603,8 +608,7 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
             if (icon != null) ...[
               Icon(icon,
                   size: 12,
-                  color:
-                      active ? Colors.white : AppColors.mutedForeground),
+                  color: active ? Colors.white : AppColors.mutedForeground),
               const SizedBox(width: 4),
             ],
             Text(
@@ -612,8 +616,7 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingOb
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color:
-                    active ? Colors.white : AppColors.mutedForeground,
+                color: active ? Colors.white : AppColors.mutedForeground,
               ),
             ),
           ],

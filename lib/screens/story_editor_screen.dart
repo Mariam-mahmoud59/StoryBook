@@ -184,6 +184,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
     });
   }
 
+  // ignore: unused_element
   void _nextPage() {
     if (_activePage < _pages.length - 1) {
       HapticFeedback.lightImpact();
@@ -194,6 +195,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
     }
   }
 
+  // ignore: unused_element
   void _previousPage() {
     if (_activePage > 0) {
       HapticFeedback.lightImpact();

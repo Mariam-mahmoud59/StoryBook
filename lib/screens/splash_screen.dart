@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
@@ -39,6 +40,18 @@ class _SplashScreenState extends State<SplashScreen>
 
     if (!mounted) return;
 
+    // ── First-launch check ──────────────────────────────────────────
+    final prefs = await SharedPreferences.getInstance();
+    final onboardingDone = prefs.getBool('onboarding_complete') ?? false;
+
+    if (!mounted) return;
+
+    if (!onboardingDone) {
+      Navigator.pushReplacementNamed(context, '/onboarding');
+      return;
+    }
+
+    // ── Returning user — use auth-based routing ─────────────────────
     final authProvider = context.read<AuthProvider>();
     await authProvider.verifySession();
 
@@ -60,7 +73,7 @@ class _SplashScreenState extends State<SplashScreen>
         );
         break;
       case AuthStatus.unauthenticated:
-        Navigator.pushReplacementNamed(context, '/sign-in');
+        Navigator.pushReplacementNamed(context, '/welcome');
         break;
     }
   }
