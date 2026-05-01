@@ -22,7 +22,7 @@ class StoryEditorScreen extends StatefulWidget {
   State<StoryEditorScreen> createState() => _StoryEditorScreenState();
 }
 
-class _StoryEditorScreenState extends State<StoryEditorScreen> with WidgetsBindingObserver {
+class _StoryEditorScreenState extends State<StoryEditorScreen> {
   static const Uuid _uuid = Uuid();
   static const List<String> _storySuggestions = [
     'Once upon a time...',
@@ -74,7 +74,6 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> with WidgetsBindi
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _titleController = TextEditingController(text: 'My New Story');
     _storyTextController = TextEditingController();
     _storyTextFocusNode = FocusNode();
@@ -106,21 +105,10 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> with WidgetsBindi
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _titleController.dispose();
     _storyTextController.dispose();
     _storyTextFocusNode.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      // Auto-save only if title is not empty to avoid validation snackbar when minimized
-      if (_titleController.text.trim().isNotEmpty) {
-        _save(andNavigate: false);
-      }
-    }
   }
 
   void _bindStoryTextToActivePage() {
@@ -426,6 +414,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> with WidgetsBindi
                   children: [
                     _iconBtn(
                       Icons.close_rounded,
+                      // ignore: deprecated_member_use
                       Colors.white.withOpacity(0.8),
                       AppColors.foreground,
                       () => Navigator.pop(context),
@@ -436,7 +425,11 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> with WidgetsBindi
                           AnimatedBuilder(
                             animation: _titleController,
                             builder: (context, _) => Text(
-                              isNew ? 'New Story' : (_titleController.text.isNotEmpty ? _titleController.text : 'Story Detail'),
+                              isNew
+                                  ? 'New Story'
+                                  : (_titleController.text.isNotEmpty
+                                      ? _titleController.text
+                                      : 'Story Detail'),
                               style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w900,
@@ -458,7 +451,9 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> with WidgetsBindi
                       AppColors.destructive,
                       () {
                         if (!isNew) {
-                          context.read<StoriesProvider>().deleteStory(widget.storyId!);
+                          context
+                              .read<StoriesProvider>()
+                              .deleteStory(widget.storyId!);
                         }
                         Navigator.pop(context);
                       },
@@ -564,7 +559,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> with WidgetsBindi
                                   _label('CHOOSE COVER'),
                                   GestureDetector(
                                     onTap: _pickCoverImage,
-                                    child: Text(
+                                    child: const Text(
                                       'Upload Photo',
                                       style: TextStyle(
                                         fontSize: 12,
@@ -731,7 +726,8 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> with WidgetsBindi
                       GridView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
@@ -743,15 +739,22 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> with WidgetsBindi
                           final active = _activePage == i;
                           final textSnippet = page.text.isEmpty
                               ? 'No text'
-                              : (page.text.length > 30 ? '${page.text.substring(0, 30)}...' : page.text);
+                              : (page.text.length > 30
+                                  ? '${page.text.substring(0, 30)}...'
+                                  : page.text);
 
                           return GestureDetector(
                             onTap: () {
                               HapticFeedback.selectionClick();
                               if (!isNew) {
-                                Navigator.pushNamed(context, '/viewer/${widget.storyId}', arguments: {'pageIndex': i});
+                                Navigator.pushNamed(
+                                    context, '/viewer/${widget.storyId}',
+                                    arguments: {'pageIndex': i});
                               } else {
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Save story first to view pages')));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text(
+                                            'Save story first to view pages')));
                               }
                             },
                             child: AnimatedContainer(
@@ -761,7 +764,9 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> with WidgetsBindi
                                 color: _hexToColor(page.backgroundColor),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
-                                  color: active ? AppColors.primary : Colors.white.withOpacity(0.5),
+                                  color: active
+                                      ? AppColors.primary
+                                      : Colors.white.withOpacity(0.5),
                                   width: active ? 2 : 1.5,
                                 ),
                               ),
@@ -769,14 +774,22 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> with WidgetsBindi
                                 children: [
                                   CircleAvatar(
                                     radius: 14,
-                                    backgroundColor: Colors.white.withOpacity(0.5),
-                                    child: Text('${i + 1}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.foreground)),
+                                    backgroundColor:
+                                        Colors.white.withOpacity(0.5),
+                                    child: Text('${i + 1}',
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.foreground)),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
                                       textSnippet,
-                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground),
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.foreground),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                     ),
