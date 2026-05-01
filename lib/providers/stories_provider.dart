@@ -7,14 +7,18 @@ class StoriesProvider extends ChangeNotifier {
   static const Uuid _uuid = Uuid();
   final StoryRepository _storyRepository;
   List<Story> _stories = [];
+  bool _isLoading = false;
 
   StoriesProvider({required StoryRepository storyRepository})
       : _storyRepository = storyRepository;
 
   List<Story> get stories => _stories;
+  bool get isLoading => _isLoading;
   List<Story> get favorites => _stories.where((s) => s.isFavorite).toList();
 
   Future<void> loadStories() async {
+    _isLoading = true;
+    notifyListeners();
     try {
       _stories = await _storyRepository.getStories();
       if (_stories.isEmpty) {
@@ -26,8 +30,10 @@ class StoriesProvider extends ChangeNotifier {
       }
     } catch (_) {
       _stories = sampleStories();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   Future<String> addStory({

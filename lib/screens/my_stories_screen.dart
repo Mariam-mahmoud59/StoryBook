@@ -17,16 +17,30 @@ class MyStoriesScreen extends StatefulWidget {
   State<MyStoriesScreen> createState() => _MyStoriesScreenState();
 }
 
-class _MyStoriesScreenState extends State<MyStoriesScreen> {
+class _MyStoriesScreenState extends State<MyStoriesScreen> with WidgetsBindingObserver {
   String _search = '';
   bool _showFavoritesOnly = false;
   bool _isGridView = false;
   final _searchController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _searchController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      context.read<StoriesProvider>().loadStories();
+    }
   }
 
   @override
@@ -156,6 +170,14 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> {
     final filtered = _filtered(stories);
 
     return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          HapticFeedback.mediumImpact();
+          Navigator.pushNamed(context, '/editor/new');
+        },
+        backgroundColor: AppColors.primary,
+        child: const Icon(Icons.add, color: Colors.white),
+      ),
       body: GradientBackground(
         variant: GradientVariant.purple,
         child: SafeArea(
@@ -314,11 +336,13 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> {
 
               // Content
               Expanded(
-                child: filtered.isEmpty
-                    ? _emptyState()
-                    : _isGridView
-                        ? _gridView(filtered)
-                        : _listView(filtered),
+                child: context.watch<StoriesProvider>().isLoading
+                    ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                    : filtered.isEmpty
+                        ? _emptyState()
+                        : _isGridView
+                            ? _gridView(filtered)
+                            : _listView(filtered),
               ),
             ],
           ),
@@ -332,22 +356,40 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
       itemCount: stories.length,
       itemBuilder: (context, i) {
+        final story = stories[i];
+        final bgColor = _hexToColor(story.coverColor);
+        
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
               padding: const EdgeInsets.only(left: 4, bottom: 6),
-              child: _buildSyncStatus(context, stories[i]),
+              child: _buildSyncStatus(context, story),
             ),
-            StoryCard(
-              story: stories[i],
-              onTap: () =>
-                  Navigator.pushNamed(context, '/viewer/${stories[i].id}'),
-              onEdit: () =>
-                  Navigator.pushNamed(context, '/editor/${stories[i].id}'),
-              onDelete: () => _confirmDelete(context, stories[i].id),
-              onToggleFavorite: () =>
-                  context.read<StoriesProvider>().toggleFavorite(stories[i].id),
+            Card(
+              elevation: 4,
+              shadowColor: Colors.black.withOpacity(0.06),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              color: AppColors.card,
+              margin: const EdgeInsets.only(bottom: 16),
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(12),
+                leading: CircleAvatar(
+                  backgroundColor: bgColor.withOpacity(0.5),
+                  radius: 30,
+                  child: Text(story.coverEmoji, style: const TextStyle(fontSize: 24)),
+                ),
+                title: Text(
+                  story.title,
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.foreground),
+                ),
+                subtitle: Text(
+                  '${story.pages.length} pages',
+                  style: const TextStyle(color: AppColors.mutedForeground),
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: AppColors.mutedForeground),
+                onTap: () => Navigator.pushNamed(context, '/editor/${story.id}'),
+              ),
             ),
           ],
         ).animate().fadeIn(delay: (i * 50).ms);

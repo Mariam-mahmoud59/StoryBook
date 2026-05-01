@@ -15,6 +15,20 @@ class StoryViewerScreen extends StatefulWidget {
 
 class _StoryViewerScreenState extends State<StoryViewerScreen> {
   int _currentPage = 0;
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      final args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      if (args != null && args['pageIndex'] != null) {
+        _currentPage = args['pageIndex'] as int;
+      }
+      _initialized = true;
+    }
+  }
 
   @override
   void initState() {
@@ -43,7 +57,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
         child: Image.network(
           imageDesc,
           fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => Text(emoji, style: const TextStyle(fontSize: 100)),
+          errorBuilder: (context, error, stackTrace) =>
+              Text(emoji, style: const TextStyle(fontSize: 100)),
         ),
       );
     }
@@ -59,7 +74,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
         child: Image.file(
           File(localPath),
           fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => Text(emoji, style: const TextStyle(fontSize: 100)),
+          errorBuilder: (context, error, stackTrace) =>
+              Text(emoji, style: const TextStyle(fontSize: 100)),
         ),
       );
     }
@@ -98,10 +114,45 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
     setState(() => _currentPage = next);
   }
 
+  void _showEditDialog(BuildContext context, dynamic story) {
+    final page = story.pages[_currentPage];
+    final controller = TextEditingController(text: page.text);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Page'),
+        content: TextField(
+          controller: controller,
+          maxLines: 5,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: 'What happens on this page?',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              setState(() {
+                page.text = controller.text;
+              });
+              context.read<StoriesProvider>().updateStory(story.id, story);
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final story =
-        context.watch<StoriesProvider>().getStory(widget.storyId);
+    final story = context.watch<StoriesProvider>().getStory(widget.storyId);
 
     if (story == null) {
       return Scaffold(
@@ -113,8 +164,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
               const SizedBox(height: 12),
               const Text(
                 'Story not found',
-                style: TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.w700),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -126,13 +176,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
       );
     }
 
-    final page = story.pages.isNotEmpty
-        ? story.pages[_currentPage]
-        : null;
+    final page = story.pages.isNotEmpty ? story.pages[_currentPage] : null;
     final isFirst = _currentPage == 0;
     final isLast = _currentPage == story.pages.length - 1;
-    final bgColor =
-        page != null ? _hexToColor(page.backgroundColor) : AppColors.gradientPink;
+    final bgColor = page != null
+        ? _hexToColor(page.backgroundColor)
+        : AppColors.gradientPink;
 
     return Scaffold(
       body: GestureDetector(
@@ -209,8 +258,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
                           ),
                           const SizedBox(width: 8),
                           GestureDetector(
-                            onTap: () => Navigator.pushNamed(
-                                context, '/editor/${story.id}'),
+                            onTap: () => _showEditDialog(context, story),
                             child: Container(
                               width: 40,
                               height: 40,
@@ -230,15 +278,14 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
 
                 // Progress dots
                 Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   child: Row(
                     children: List.generate(
                       story.pages.length,
                       (i) => Expanded(
                         child: GestureDetector(
-                          onTap: () =>
-                              _goToPage(i, story.pages.length),
+                          onTap: () => _goToPage(i, story.pages.length),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
                             height: 6,
@@ -266,16 +313,17 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
                         // Illustration area
                         Container(
                           width: double.infinity,
-                          constraints:
-                              const BoxConstraints(minHeight: 220),
+                          constraints: const BoxConstraints(minHeight: 220),
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(28),
                           ),
                           child: page != null
-                              ? _buildImage(page.imageDescription, story.coverEmoji)
-                              : Text(story.coverEmoji, style: const TextStyle(fontSize: 90)),
+                              ? _buildImage(
+                                  page.imageDescription, story.coverEmoji)
+                              : Text(story.coverEmoji,
+                                  style: const TextStyle(fontSize: 90)),
                         ),
 
                         const SizedBox(height: 20),
@@ -333,8 +381,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
                       GestureDetector(
                         onTap: isFirst
                             ? null
-                            : () => _goToPage(
-                                _currentPage - 1, story.pages.length),
+                            : () =>
+                                _goToPage(_currentPage - 1, story.pages.length),
                         child: Opacity(
                           opacity: isFirst ? 0.3 : 1,
                           child: Container(
@@ -344,10 +392,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
                               color: Colors.white.withValues(alpha: 0.7),
                               borderRadius: BorderRadius.circular(24),
                             ),
-                            child: const Icon(
-                                Icons.chevron_left_rounded,
-                                color: AppColors.foreground,
-                                size: 28),
+                            child: const Icon(Icons.chevron_left_rounded,
+                                color: AppColors.foreground, size: 28),
                           ),
                         ),
                       ),
@@ -407,10 +453,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
                                   color: Colors.white.withValues(alpha: 0.7),
                                   borderRadius: BorderRadius.circular(24),
                                 ),
-                                child: const Icon(
-                                    Icons.chevron_right_rounded,
-                                    color: AppColors.foreground,
-                                    size: 28),
+                                child: const Icon(Icons.chevron_right_rounded,
+                                    color: AppColors.foreground, size: 28),
                               ),
                             ),
                     ],

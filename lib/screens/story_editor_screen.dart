@@ -22,7 +22,7 @@ class StoryEditorScreen extends StatefulWidget {
   State<StoryEditorScreen> createState() => _StoryEditorScreenState();
 }
 
-class _StoryEditorScreenState extends State<StoryEditorScreen> {
+class _StoryEditorScreenState extends State<StoryEditorScreen> with WidgetsBindingObserver {
   static const Uuid _uuid = Uuid();
   static const List<String> _storySuggestions = [
     'Once upon a time...',
@@ -74,6 +74,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _titleController = TextEditingController(text: 'My New Story');
     _storyTextController = TextEditingController();
     _storyTextFocusNode = FocusNode();
@@ -105,10 +106,21 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _titleController.dispose();
     _storyTextController.dispose();
     _storyTextFocusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      // Auto-save only if title is not empty to avoid validation snackbar when minimized
+      if (_titleController.text.trim().isNotEmpty) {
+        _save(andNavigate: false);
+      }
+    }
   }
 
   void _bindStoryTextToActivePage() {
@@ -421,13 +433,18 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                     Expanded(
                       child: Column(
                         children: [
-                          Text(
-                            isNew ? 'New Story' : 'Edit Story',
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w900,
-                              color: AppColors.foreground,
-                              letterSpacing: -0.5,
+                          AnimatedBuilder(
+                            animation: _titleController,
+                            builder: (context, _) => Text(
+                              isNew ? 'New Story' : (_titleController.text.isNotEmpty ? _titleController.text : 'Story Detail'),
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.foreground,
+                                letterSpacing: -0.5,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -436,10 +453,15 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                       ),
                     ),
                     _iconBtn(
-                      Icons.more_horiz_rounded,
+                      Icons.delete_outline_rounded,
                       Colors.white.withOpacity(0.8),
-                      AppColors.foreground,
-                      () {},
+                      AppColors.destructive,
+                      () {
+                        if (!isNew) {
+                          context.read<StoriesProvider>().deleteStory(widget.storyId!);
+                        }
+                        Navigator.pop(context);
+                      },
                     ),
                   ],
                 ),
@@ -706,61 +728,64 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
                       ),
 
                       const SizedBox(height: 16),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        physics: const BouncingScrollPhysics(),
-                        child: Row(
-                          children: List.generate(_pages.length, (i) {
-                            final active = _activePage == i;
-                            return GestureDetector(
-                              onTap: () {
-                                HapticFeedback.selectionClick();
-                                setState(() {
-                                  _activePage = i;
-                                  _bindStoryTextToActivePage();
-                                });
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 250),
-                                width: 54,
-                                height: 54,
-                                margin: const EdgeInsets.only(right: 12),
-                                decoration: BoxDecoration(
-                                  color: _hexToColor(_pages[i].backgroundColor),
-                                  borderRadius: BorderRadius.circular(18),
-                                  border: Border.all(
-                                    color: active
-                                        ? AppColors.primary
-                                        : Colors.white.withOpacity(0.5),
-                                    width: active ? 3 : 1.5,
-                                  ),
-                                  boxShadow: [
-                                    if (active)
-                                      BoxShadow(
-                                        color:
-                                            AppColors.primary.withOpacity(0.2),
-                                        blurRadius: 10,
-                                        offset: const Offset(0, 4),
-                                      )
-                                  ],
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '${i + 1}',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w900,
-                                      color: active
-                                          ? AppColors.primary
-                                          : AppColors.foreground
-                                              .withOpacity(0.7),
-                                    ),
-                                  ),
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 2.2,
+                        ),
+                        itemCount: _pages.length,
+                        itemBuilder: (context, i) {
+                          final page = _pages[i];
+                          final active = _activePage == i;
+                          final textSnippet = page.text.isEmpty
+                              ? 'No text'
+                              : (page.text.length > 30 ? '${page.text.substring(0, 30)}...' : page.text);
+
+                          return GestureDetector(
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              if (!isNew) {
+                                Navigator.pushNamed(context, '/viewer/${widget.storyId}', arguments: {'pageIndex': i});
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Save story first to view pages')));
+                              }
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 250),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: _hexToColor(page.backgroundColor),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: active ? AppColors.primary : Colors.white.withOpacity(0.5),
+                                  width: active ? 2 : 1.5,
                                 ),
                               ),
-                            );
-                          }),
-                        ),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 14,
+                                    backgroundColor: Colors.white.withOpacity(0.5),
+                                    child: Text('${i + 1}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.foreground)),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      textSnippet,
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
                       ),
 
                       const SizedBox(height: 24),

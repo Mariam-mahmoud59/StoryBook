@@ -105,6 +105,15 @@ class Story {
         createdAt: DateTime.parse(json['createdAt'] as String),
         updatedAt: DateTime.parse(json['updatedAt'] as String),
       );
+  void displaySummary() {
+    print("=== Story Summary ===");
+    print("Title: $title");
+
+    print("Author: Not specified");
+
+    print("Page Count: ${pages.length}");
+    print("Created At: $createdAt");
+  }
 }
 
 List<Story> sampleStories() {
