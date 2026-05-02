@@ -281,6 +281,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           );
                         },
                       ),
+                      const Divider(
+                          height: 1, color: AppColors.border, indent: 64),
+                      _settingRow(
+                        icon: Icons.delete_sweep_rounded,
+                        title: 'Clear Sync Queue',
+                        subtitle: 'Remove stuck/failed sync entries',
+                        iconColor: AppColors.warning,
+                        onTap: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20)),
+                              title: const Text('Clear Sync Queue?'),
+                              content: const Text(
+                                  'This removes all pending sync entries. '
+                                  'Your local stories remain intact, but '
+                                  'un-synced changes will be lost.'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () async {
+                                    Navigator.pop(context);
+                                    final engine =
+                                        context.read<SyncEngineService>();
+                                    final cleared =
+                                        await engine.clearAllSyncEntries();
+                                    if (!context.mounted) return;
+                                    setState(() {});
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                            'Cleared $cleared sync entries'),
+                                      ),
+                                    );
+                                  },
+                                  style: TextButton.styleFrom(
+                                      foregroundColor: AppColors.warning),
+                                  child: const Text('Clear'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                     ]),
 
                     const SizedBox(height: 16),

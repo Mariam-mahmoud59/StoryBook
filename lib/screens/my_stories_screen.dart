@@ -381,8 +381,13 @@ class _MyStoriesScreenState extends State<MyStoriesScreen>
                 leading: CircleAvatar(
                   backgroundColor: bgColor.withOpacity(0.5),
                   radius: 30,
-                  child: Text(story.coverEmoji,
-                      style: const TextStyle(fontSize: 24)),
+                  child: ClipOval(
+                    child: SizedBox(
+                      width: 60,
+                      height: 60,
+                      child: _buildCoverImage(story.coverEmoji),
+                    ),
+                  ),
                 ),
                 title: Text(
                   story.title,

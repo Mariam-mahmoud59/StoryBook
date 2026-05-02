@@ -32,7 +32,7 @@ class _StoryPreviewScreenState extends State<StoryPreviewScreen> {
 
   Widget _buildImage(String imageDesc, String emoji) {
     if (imageDesc.isEmpty) {
-      return Text(emoji, style: const TextStyle(fontSize: 100))
+      return _buildEmojiOrImage(emoji, size: 100)
           .animate()
           .scale(duration: 400.ms, curve: Curves.elasticOut);
     }
@@ -43,7 +43,7 @@ class _StoryPreviewScreenState extends State<StoryPreviewScreen> {
         child: Image.network(
           imageDesc,
           fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => Text(emoji, style: const TextStyle(fontSize: 100)),
+          errorBuilder: (context, error, stackTrace) => _buildEmojiOrImage(emoji, size: 100),
         ),
       );
     }
@@ -59,7 +59,7 @@ class _StoryPreviewScreenState extends State<StoryPreviewScreen> {
         child: Image.file(
           File(localPath),
           fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => Text(emoji, style: const TextStyle(fontSize: 100)),
+          errorBuilder: (context, error, stackTrace) => _buildEmojiOrImage(emoji, size: 100),
         ),
       );
     }
@@ -68,7 +68,7 @@ class _StoryPreviewScreenState extends State<StoryPreviewScreen> {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(emoji, style: const TextStyle(fontSize: 100)),
+        _buildEmojiOrImage(emoji, size: 100),
         const SizedBox(height: 16),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -85,6 +85,33 @@ class _StoryPreviewScreenState extends State<StoryPreviewScreen> {
         ),
       ],
     ).animate().scale(duration: 400.ms, curve: Curves.elasticOut);
+  }
+
+  Widget _buildEmojiOrImage(String value, {double size = 64}) {
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Image.network(value, fit: BoxFit.cover, width: size, height: size),
+      );
+    }
+    String localPath = value;
+    if (value.startsWith('file://')) {
+      localPath = value.replaceFirst('file://', '');
+    }
+    if (localPath.startsWith('/') || localPath.contains(':\\')) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Image.file(
+          File(localPath),
+          fit: BoxFit.cover,
+          width: size,
+          height: size,
+          errorBuilder: (_, __, ___) =>
+              Text('📖', style: TextStyle(fontSize: size)),
+        ),
+      );
+    }
+    return Text(value, style: TextStyle(fontSize: size));
   }
 
   @override

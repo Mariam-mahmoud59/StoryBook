@@ -70,10 +70,13 @@ class StoryRepository {
         ),
       );
 
-      // 2. Queue story creation
+      // 2. Queue story creation (author_id required by Supabase RLS)
       final storyJson = story.toJson();
       if (user != null) {
         storyJson['author_id'] = user.id;
+      } else {
+        // Without author_id, RLS will reject the insert
+        throw StateError('Cannot sync story without authenticated user.');
       }
       
       await _db.into(_db.syncQueues).insert(
@@ -124,11 +127,16 @@ class StoryRepository {
         ),
       );
 
-      // 2. Queue story update
+      // 2. Queue story update (include author_id for RLS)
+      final storyJson = story.toJson();
+      final user = _authService.getCurrentUser();
+      if (user != null) {
+        storyJson['author_id'] = user.id;
+      }
       await _db.into(_db.syncQueues).insert(
         SyncQueuesCompanion.insert(
           actionType: 'UPDATE_STORY',
-          payload: jsonEncode(story.toJson()),
+          payload: jsonEncode(storyJson),
         ),
       );
 

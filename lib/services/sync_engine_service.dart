@@ -126,6 +126,10 @@ class SyncEngineService {
           _validateUuidPayload(record.actionType, data);
 
           // 2e — Route to the correct Supabase operation.
+          log(
+            'Dispatching [${record.actionType}] id=${record.id} payload=$data',
+            name: 'SyncEngine',
+          );
           await _dispatch(record.actionType, data);
 
           // 2f — Success → remove from queue.
@@ -246,6 +250,14 @@ class SyncEngineService {
       );
     final results = await query.get();
     return results.length;
+  }
+
+  /// Clears all entries from the sync queue (pending, failed, permanently_failed).
+  /// Use when stale/orphaned entries are blocking sync.
+  Future<int> clearAllSyncEntries() async {
+    final count = await _db.delete(_db.syncQueues).go();
+    log('Cleared $count sync queue entries.', name: 'SyncEngine');
+    return count;
   }
 
   /// Watches the sync status for a specific story ID.
