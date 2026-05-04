@@ -17,13 +17,14 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _bounceController;
   late Animation<double> _bounceAnim;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _bounceController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000),
@@ -35,13 +36,23 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _bounceController.dispose();
     super.dispose();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      context.read<StoriesProvider>().loadStories();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final stories = context.watch<StoriesProvider>().stories;
+    final storiesProvider = context.watch<StoriesProvider>();
+    final stories = storiesProvider.stories;
+    final isLoading = storiesProvider.isLoading;
     final favoriteCount = stories.where((s) => s.isFavorite).length;
 
     final authProvider = context.watch<AuthProvider>();
@@ -59,7 +70,14 @@ class _HomeScreenState extends State<HomeScreen>
 
     return Scaffold(
       body: GradientBackground(
-        child: CustomScrollView(
+        child: isLoading
+            ? const Center(
+                child: CircularProgressIndicator(
+                  color: AppColors.primary,
+                  strokeWidth: 3,
+                ),
+              )
+            : CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
             // 1. Premium Frosted Glass AppBar

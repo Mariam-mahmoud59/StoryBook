@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'providers/stories_provider.dart';
 import 'theme/app_colors.dart';
 import 'screens/splash_screen.dart';
 import 'screens/sign_in_screen.dart';
@@ -26,13 +29,15 @@ class StorybookApp extends StatefulWidget {
   State<StorybookApp> createState() => _StorybookAppState();
 }
 
-class _StorybookAppState extends State<StorybookApp> {
+class _StorybookAppState extends State<StorybookApp>
+    with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
   late final StreamSubscription<AuthState> _authSubscription;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _authSubscription =
         Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       if (data.event == AuthChangeEvent.passwordRecovery) {
@@ -47,8 +52,28 @@ class _StorybookAppState extends State<StorybookApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _authSubscription.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final ctx = _navigatorKey.currentContext;
+    if (ctx == null) return;
+
+    final storiesProvider =
+        Provider.of<StoriesProvider>(ctx, listen: false);
+
+    if (state == AppLifecycleState.paused) {
+      // Persist any unsaved changes when the app goes to background
+      log('App paused – saving stories to local storage.', name: 'Lifecycle');
+      storiesProvider.saveAllStories();
+    } else if (state == AppLifecycleState.resumed) {
+      // Reload the latest data from storage when coming back
+      log('App resumed – reloading stories from storage.', name: 'Lifecycle');
+      storiesProvider.loadStories();
+    }
   }
 
   @override

@@ -105,4 +105,16 @@ class StoriesProvider extends ChangeNotifier {
       return null;
     }
   }
+
+  /// Persist all in-memory stories to local storage.
+  /// Called when the app is paused to prevent data loss.
+  Future<void> saveAllStories() async {
+    for (final story in _stories) {
+      try {
+        await _storyRepository.updateStory(story);
+      } catch (_) {
+        // Ignore individual save failures – best-effort persistence.
+      }
+    }
+  }
 }

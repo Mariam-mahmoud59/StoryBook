@@ -22,7 +22,8 @@ class StoryEditorScreen extends StatefulWidget {
   State<StoryEditorScreen> createState() => _StoryEditorScreenState();
 }
 
-class _StoryEditorScreenState extends State<StoryEditorScreen> {
+class _StoryEditorScreenState extends State<StoryEditorScreen>
+    with WidgetsBindingObserver {
   static const Uuid _uuid = Uuid();
   static const List<String> _storySuggestions = [
     'Once upon a time...',
@@ -74,6 +75,7 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _titleController = TextEditingController(text: 'My New Story');
     _storyTextController = TextEditingController();
     _storyTextFocusNode = FocusNode();
@@ -105,10 +107,22 @@ class _StoryEditorScreenState extends State<StoryEditorScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _titleController.dispose();
     _storyTextController.dispose();
     _storyTextFocusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      // Auto-save current work when the app goes to background
+      _save(andNavigate: false);
+    } else if (state == AppLifecycleState.resumed) {
+      // Refresh stories list from storage when coming back
+      context.read<StoriesProvider>().loadStories();
+    }
   }
 
   void _bindStoryTextToActivePage() {
