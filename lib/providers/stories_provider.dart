@@ -98,6 +98,16 @@ class StoriesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Clears in-memory stories and wipes the local database.
+  /// Must be called on sign-out to prevent data leaking to the next user.
+  Future<void> clearLocalData() async {
+    // 1. Wipe the local SQLite tables so the next user starts fresh
+    await _storyRepository.clearLocalCacheOnly();
+    // 2. Ensure the in-memory list is empty
+    _stories = [];
+    notifyListeners();
+  }
+
   Story? getStory(String id) {
     try {
       return _stories.firstWhere((s) => s.id == id);

@@ -203,4 +203,14 @@ class StoryRepository {
       }
     });
   }
+
+  /// Clears local database completely without queuing any sync deletions.
+  /// Used when signing out to prevent data leaking to the next user.
+  Future<void> clearLocalCacheOnly() async {
+    await _db.transaction(() async {
+      await _db.delete(_db.storyPagesTable).go();
+      await _db.delete(_db.storiesTable).go();
+      await _db.delete(_db.syncQueues).go();
+    });
+  }
 }

@@ -43,7 +43,8 @@ class _StoryPreviewScreenState extends State<StoryPreviewScreen> {
         child: Image.network(
           imageDesc,
           fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => _buildEmojiOrImage(emoji, size: 100),
+          errorBuilder: (context, error, stackTrace) =>
+              _buildEmojiOrImage(emoji, size: 100),
         ),
       );
     }
@@ -59,7 +60,8 @@ class _StoryPreviewScreenState extends State<StoryPreviewScreen> {
         child: Image.file(
           File(localPath),
           fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => _buildEmojiOrImage(emoji, size: 100),
+          errorBuilder: (context, error, stackTrace) =>
+              _buildEmojiOrImage(emoji, size: 100),
         ),
       );
     }
@@ -91,7 +93,8 @@ class _StoryPreviewScreenState extends State<StoryPreviewScreen> {
     if (value.startsWith('http://') || value.startsWith('https://')) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: Image.network(value, fit: BoxFit.cover, width: size, height: size),
+        child:
+            Image.network(value, fit: BoxFit.cover, width: size, height: size),
       );
     }
     String localPath = value;
@@ -116,8 +119,7 @@ class _StoryPreviewScreenState extends State<StoryPreviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final story =
-        context.watch<StoriesProvider>().getStory(widget.storyId);
+    final story = context.watch<StoriesProvider>().getStory(widget.storyId);
 
     if (story == null) {
       return const Scaffold(
@@ -165,7 +167,8 @@ class _StoryPreviewScreenState extends State<StoryPreviewScreen> {
                                   child: Padding(
                                     padding: const EdgeInsets.all(16.0),
                                     child: Center(
-                                      child: _buildImage(page.imageDescription, story.coverEmoji),
+                                      child: _buildImage(page.imageDescription,
+                                          story.coverEmoji),
                                     ),
                                   ),
                                 ),
@@ -323,6 +326,32 @@ class _StoryPreviewScreenState extends State<StoryPreviewScreen> {
                       ),
                     );
                   }),
+                ),
+              ),
+            ),
+          ),
+
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 48,
+            child: SafeArea(
+              child: Center(
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.pushReplacementNamed(
+                    context,
+                    '/editor/${story.id}',
+                  ),
+                  icon: const Icon(Icons.edit_rounded),
+                  label: const Text('Edit Story'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.black.withValues(alpha: 0.72),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                  ),
                 ),
               ),
             ),

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../providers/auth_provider.dart';
+import '../providers/stories_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/auth_text_field.dart';
 import '../widgets/google_sign_in_button.dart';
@@ -86,6 +87,11 @@ class _SignInScreenState extends State<SignInScreen> {
 
     switch (status) {
       case AuthStatus.authenticated:
+        // Reload stories for the newly signed-in user
+        if (mounted) {
+          await context.read<StoriesProvider>().loadStories();
+        }
+        if (!mounted) return;
         Navigator.pushReplacementNamed(context, '/');
         break;
       case AuthStatus.recoveringPassword:
@@ -124,6 +130,10 @@ class _SignInScreenState extends State<SignInScreen> {
 
         switch (status) {
           case AuthStatus.authenticated:
+            if (mounted) {
+              await context.read<StoriesProvider>().loadStories();
+            }
+            if (!mounted) return;
             Navigator.pushReplacementNamed(context, '/');
             break;
           case AuthStatus.recoveringPassword:

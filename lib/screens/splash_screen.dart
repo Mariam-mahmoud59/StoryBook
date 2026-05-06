@@ -15,6 +15,7 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
+  static const _onboardingStorageKey = 'onboarding_complete_v2';
   late AnimationController _pulseController;
 
   @override
@@ -42,7 +43,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     // ── First-launch check ──────────────────────────────────────────
     final prefs = await SharedPreferences.getInstance();
-    final onboardingDone = prefs.getBool('onboarding_complete') ?? false;
+    final onboardingDone = prefs.getBool(_onboardingStorageKey) ?? false;
 
     if (!mounted) return;
 

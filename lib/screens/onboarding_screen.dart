@@ -30,6 +30,7 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen>
     with TickerProviderStateMixin {
+  static const _onboardingStorageKey = 'onboarding_complete_v2';
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
@@ -68,7 +69,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   Future<void> _completeOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('onboarding_complete', true);
+    await prefs.setBool(_onboardingStorageKey, true);
     if (!mounted) return;
     Navigator.pushReplacementNamed(context, '/welcome');
   }

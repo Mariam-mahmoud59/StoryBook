@@ -329,6 +329,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         iconColor: AppColors.destructive,
                         onTap: () async {
                           HapticFeedback.heavyImpact();
+                          // Clear local stories before signing out to prevent
+                          // data leaking to the next user who logs in.
+                          await context.read<StoriesProvider>().clearLocalData();
                           await context.read<AuthProvider>().signOut();
                           if (!context.mounted) return;
                           Navigator.pushNamedAndRemoveUntil(

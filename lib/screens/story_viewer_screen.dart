@@ -113,7 +113,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
     if (value.startsWith('http://') || value.startsWith('https://')) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: Image.network(value, fit: BoxFit.cover, width: size, height: size),
+        child:
+            Image.network(value, fit: BoxFit.cover, width: size, height: size),
       );
     }
     String localPath = value;
@@ -140,42 +141,6 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
     if (next < 0 || next >= total) return;
     HapticFeedback.lightImpact();
     setState(() => _currentPage = next);
-  }
-
-  void _showEditDialog(BuildContext context, dynamic story) {
-    final page = story.pages[_currentPage];
-    final controller = TextEditingController(text: page.text);
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit Page'),
-        content: TextField(
-          controller: controller,
-          maxLines: 5,
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            hintText: 'What happens on this page?',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              setState(() {
-                page.text = controller.text;
-              });
-              context.read<StoriesProvider>().updateStory(story.id, story);
-              Navigator.pop(ctx);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -286,7 +251,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
                           ),
                           const SizedBox(width: 8),
                           GestureDetector(
-                            onTap: () => _showEditDialog(context, story),
+                            onTap: () => Navigator.pushNamed(
+                              context,
+                              '/editor/${story.id}',
+                            ),
                             child: Container(
                               width: 40,
                               height: 40,
