@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../models/story.dart';
 import '../repositories/story_repository.dart';
@@ -20,9 +21,17 @@ class StoriesProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
+      final user = Supabase.instance.client.auth.currentUser;
       _stories = await _storyRepository.getStories();
+      
+      // If the local database is empty and a user is signed in, pull their stories from the cloud.
+      if (_stories.isEmpty && user != null) {
+        await _storyRepository.syncFromCloud(user.id);
+        _stories = await _storyRepository.getStories();
+      }
+
+      // If still empty (new user with no cloud stories), generate sample stories
       if (_stories.isEmpty) {
-        // If empty, perhaps load some sample stories
         for (var story in sampleStories()) {
           await _storyRepository.createStory(story);
         }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:drift/drift.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../database/app_database.dart';
 import '../models/story.dart';
@@ -212,5 +213,67 @@ class StoryRepository {
       await _db.delete(_db.storiesTable).go();
       await _db.delete(_db.syncQueues).go();
     });
+  }
+
+  /// Downloads the authenticated user's stories, pages, and favorites from Supabase,
+  /// and persists them into the local SQLite database.
+  Future<void> syncFromCloud(String userId) async {
+    final supabase = Supabase.instance.client;
+
+    try {
+      // 1. Fetch stories and their pages
+      final storiesData = await supabase
+          .from('stories')
+          .select('*, story_pages(*)')
+          .eq('author_id', userId);
+
+      // 2. Fetch favorites
+      final favoritesData = await supabase
+          .from('favorites')
+          .select('story_id')
+          .eq('user_id', userId);
+
+      final Set<String> favoriteStoryIds =
+          favoritesData.map((f) => f['story_id'] as String).toSet();
+
+      // 3. Insert into local SQLite without triggering sync queue events
+      await _db.transaction(() async {
+        // Optional: Ensure the db is clean if we're doing a full initial sync
+        // await clearLocalCacheOnly();
+
+        for (final sData in storiesData) {
+          final isFavorite = favoriteStoryIds.contains(sData['id']);
+
+          await _db.into(_db.storiesTable).insertOnConflictUpdate(
+                StoriesTableCompanion.insert(
+                  id: sData['id'],
+                  title: sData['title'] ?? 'Untitled',
+                  coverColor: sData['cover_color'] ?? '#FFD6E8',
+                  coverEmoji: sData['cover_emoji'] ?? '📖',
+                  isFavorite: Value(isFavorite),
+                  createdAt: DateTime.tryParse(sData['created_at'] ?? '') ?? DateTime.now(),
+                  updatedAt: DateTime.tryParse(sData['updated_at'] ?? '') ?? DateTime.now(),
+                ),
+              );
+
+          final pages = sData['story_pages'] as List<dynamic>? ?? [];
+          for (final pData in pages) {
+            await _db.into(_db.storyPagesTable).insertOnConflictUpdate(
+                  StoryPagesTableCompanion.insert(
+                    id: pData['id'],
+                    storyId: pData['story_id'],
+                    textContent: pData['text_content'] ?? '',
+                    imageDescription: pData['image_description'] ?? pData['image_url'] ?? '',
+                    backgroundColor: pData['background_color'] ?? '#FFD6E8',
+                  ),
+                );
+          }
+        }
+      });
+    } catch (e) {
+      // If the sync fails (e.g. no internet), we just catch and log it.
+      // The user will still be able to use the app in offline mode.
+      print('Cloud sync failed: $e');
+    }
   }
 }
